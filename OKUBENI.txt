@@ -1,0 +1,99 @@
+DPI KALKAN 2.2.0
+================
+
+GoodbyeDPI için kolay kullanımlı internet erişim kalkanı. Servis sağlayıcıların
+DNS ve DPI (Derin Paket İnceleme) ile uyguladığı erişim engellerini (ör. Discord)
+aşar. VPN değildir: trafiğiniz şifrelenmez, IP adresiniz değişmez.
+
+>>> Ayrıntılı, resimli anlatım için "Rehber.html" dosyasını açın. <<<
+
+GEREKSİNİMLER
+-------------
+- Windows 10 veya Windows 11 (32 ya da 64 bit)
+- .NET Framework 4.8 (Windows 10/11'de zaten yüklüdür)
+- Yönetici yetkisi (ağ sürücüsü yüklenebilmesi için)
+
+KURULUM
+-------
+1. Zip dosyasına sağ tıklayın → "Tümünü ayıkla". Klasörü kalıcı bir yere koyun
+   (ör. C:\Program Files\DPI Kalkan ya da Belgeler). Zip içinden çalıştırmayın.
+2. "DPIKalkan.exe"yi çalıştırın, yönetici izni sorusuna "Evet" deyin.
+   * "Windows bilgisayarınızı korudu" uyarısı çıkarsa: "Ek bilgi" →
+     "Yine de çalıştır". (Uygulama dijital olarak imzalı değildir.)
+3. Koruma otomatik başlar. "Discord'u Test Et" ile kontrol edin; Discord açıksa
+   "Discord'u yeniden başlat" düğmesine basın.
+
+DISCORD AÇILMIYORSA
+-------------------
+0. Çoğu zaman bir şey yapmanız gerekmez: koruma açıkken Discord'a erişilemezse
+   "Otomatik onarım" çalışan yöntemi kendisi bulur ve bildirim gösterir.
+1. Ana Sayfa → "Otomatik Ayarla" (Orta/Detaylı arayüzde "En iyi yöntemi bul").
+   Engel türü belirlenir, her yöntem DNS doğrulamasıyla iki tur test edilir ve
+   gerçekten çalışan yöntem seçilir.
+2. Sorun Giderme → "Tam kontrolü başlat". Bulunan her sorun hata koduyla
+   (ör. DK-204) ve "Düzelt" düğmesiyle listelenir.
+3. Sorun Giderme → "Hata Kodları ve Çözümleri" sekmesinde tüm kodlar, nedenleri
+   ve çözüm adımları vardır (Rehber.html'de de var).
+
+ARAYÜZ DÜZEYLERİ (Ayarlar ya da Görünüm sayfasından)
+-----------------
+- Basit   : Varsayılan. Başlat/durdur, otomatik ayarla, sorun bul.
+- Orta    : + Profiller, İnternet Kontrolü, DNS Ayarları, Hedef Siteler, Proxy.
+- Detaylı : + Günlük, ağ bilgisi, komut satırları, betik dışa aktarma.
+
+PROXY (Orta/Detaylı arayüz)
+---------------------------
+Yöntemler yetmezse (ör. IP engeli) kendi proxy'nizi girin: "Hızlı giriş"
+kutusuna 1.2.3.4:8080 ya da socks5://kullanıcı:şifre@1.2.3.4:1080 yapıştırın,
+"Test et" (Discord erişimi, çıkış IP'si ve ülke) → "Kaydet". Sonra "Discord'u bu
+proxy ile aç" (yalnızca Discord) ya da "Windows proxy'si yap" (tüm sistem).
+Sesli sohbet (UDP) proxy'den geçmez.
+- Toplu ekle: proxy listesini yapıştırın; hepsi aynı anda denenir, çalışanlar
+  eklenir. Yanlış tür (HTTP/SOCKS5) kendiliğinden düzeltilir.
+- Program bazlı proxy: proxy'yi yalnızca seçtiğiniz programlarda (Chrome, Edge,
+  Opera, Firefox, Discord, Spotify…) kullanın; "Kısayol" ile masaüstüne ekleyin.
+  Şifreli proxy'lerde DPI Kalkan yerel köprü (127.0.0.1) açar; açık kalmalı.
+
+PAYLAŞMA VE KISAYOL
+-------------------
+- Profiller → Paylaş → "Profil kodunu kopyala": çalışan yönteminizi arkadaşınıza
+  DKP1:… koduyla gönderin; o da "Koddan profil ekle" der.
+- Ayarlar → "Kısayol tuşu": Ctrl+Alt+K ile korumayı her yerden aç/kapat.
+- Ayarlar → Yedekleme: tüm ayarları dosyaya kaydedin / başka bilgisayara yükleyin.
+- İnternet Kontrolü → Hız Testi ve Geçmiş (grafikli bağlantı geçmişi).
+
+GÖRÜNÜM
+-------
+Varsayılan "Sistem" teması Windows'un açık/koyu modunu ve vurgu rengini kullanır.
+20 hazır tema daha var. Her rengi renk koduyla (#2563EB, 37,99,235…) ya da renk
+seçiciyle değiştirebilir, "Tema kodu" ile arkadaşlarınızla paylaşabilirsiniz.
+
+SİSTEM TEPSİSİ
+--------------
+Pencereyi kapatınca uygulama saat yanındaki kalkan simgesinde çalışmaya devam
+eder; görev çubuğunda ve Alt+Tab'da görünmez. Sağ tık menüsü: başlat/durdur,
+yöntem seç, test et, en iyi yöntemi bul, Discord'u yeniden başlat, çıkış.
+Renkler: yeşil = aktif, gri = kapalı, sarı = başlatılıyor, kırmızı = hata.
+
+ANTİVİRÜS UYARISI
+-----------------
+GoodbyeDPI, "WinDivert" adlı bir ağ sürücüsü kullanır. Kaspersky, Norton gibi
+bazı antivirüsler bunu "RiskTool" olarak işaretleyebilir. Bu bir virüs değildir.
+Engellenirse (hata kodu DK-204) uygulama klasörünü antivirüs istisnalarına ekleyin.
+
+YEDEK BETİKLER
+--------------
+"betikler" klasöründeki .cmd dosyaları GoodbyeDPI'ı uygulama olmadan çalıştırır
+(her yöntem için bir tane). Ayrıntı: betikler\BETIKLER_OKUBENI.txt
+
+KALDIRMA
+--------
+1. Ayarlar → "Windows açılışında başlat" ve "Arka plan hizmeti modu"nu kapatın.
+2. DNS Ayarları'nda değişiklik yaptıysanız "Eski ayarlara dön"e basın.
+3. Tepsi simgesine sağ tık → Çıkış, sonra klasörü silin.
+
+LİSANSLAR
+---------
+GoodbyeDPI © ValdikSS – Apache 2.0      https://github.com/ValdikSS/GoodbyeDPI
+WinDivert  © basil00  – LGPLv3          https://github.com/basil00/WinDivert
+Ayrıntılar "lisanslar" klasöründedir.

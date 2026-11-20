@@ -1,0 +1,14 @@
+# derleme çıktıları
+build/
+dist/
+*.rsp
+
+# uygulamanın çalışırken oluşturduğu ayar/günlük klasörü
+veri/
+
+# editör / işletim sistemi
+.vs/
+.vscode/
+*.user
+Thumbs.db
+desktop.ini

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DPI Kalkan Rehberi</title>
+<style>
+  :root { --bg:#f3f5f9; --card:#fff; --text:#141c2d; --muted:#5f6b80; --border:#e1e6ef; --accent:#2563eb; --soft:#e8effd;
+          --green:#15803d; --amber:#b45309; --red:#c42b1c; --code:#f4f6fa; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17191e; --card:#21242b; --text:#e8ebf1; --muted:#a2aab8; --border:#323742; --accent:#60a5fa; --soft:#1f2a3d;
+            --green:#4ade80; --amber:#fbbf24; --red:#f87171; --code:#1b1e24; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 16px 64px; }
+  header { display:flex; align-items:center; gap:16px; margin-bottom:8px; }
+  header svg { width:56px; height:56px; flex:none; }
+  h1 { margin:0; font-size:28px; }
+  .sub { color:var(--muted); margin:0; }
+  nav { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 18px; margin:20px 0; }
+  nav a { color:var(--accent); text-decoration:none; margin-right:14px; white-space:nowrap; line-height:2; }
+  section { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:6px 24px 18px; margin:18px 0; }
+  h2 { font-size:21px; margin:18px 0 8px; }
+  h3 { font-size:16px; margin:20px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .tip { background:var(--soft); border-radius:10px; padding:10px 14px; margin:12px 0; }
+  .warn { border-left:4px solid var(--amber); }
+  ol li, ul li { margin:4px 0; }
+  code { background:var(--code); border:1px solid var(--border); border-radius:5px; padding:1px 5px; font:13px Consolas, monospace; word-break:break-all; }
+  kbd { border:1px solid var(--border); border-bottom-width:2px; border-radius:4px; padding:0 5px; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; }
+  tr.nodns td { color:var(--muted); }
+  details.code { border:1px solid var(--border); border-radius:10px; padding:4px 14px; margin:8px 0; }
+  details.code[open] { padding-bottom:10px; }
+  details.code summary { cursor:pointer; font-weight:600; padding:6px 0; }
+  .badge { display:inline-block; min-width:64px; text-align:center; border-radius:6px; padding:0 6px; margin-right:6px; font:600 12px Consolas, monospace; }
+  .err .badge { background:color-mix(in srgb, var(--red) 18%, transparent); color:var(--red); }
+  .warn .badge { background:color-mix(in srgb, var(--amber) 18%, transparent); color:var(--amber); }
+  .info .badge { background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent); }
+  details.code.warn { border-left:1px solid var(--border); }
+  .lbl { margin:8px 0 0; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; }
+  .fix { color:var(--green); margin:8px 0 0; }
+  .colors span { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  @media (max-width:600px) { section { padding:4px 14px 14px; } th:nth-child(1), td:nth-child(1) { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <svg viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient></defs>
+  <path d="M50 3C63 11 78 15 93 16C94 56 79 82 50 98C21 82 6 56 7 16C22 15 37 11 50 3Z" fill="url(#g)"/>
+  <path d="M31 50L45 64L70 37" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <div><h1>DPI Kalkan Rehberi</h1><p class="sub">Sürüm <!--SURUM--> · Discord ve engelli sitelere erişim için kolay GoodbyeDPI arayüzü</p></div>
+</header>
+
+<nav>
+  <a href="#kurulum">Kurulum</a><a href="#kullanim">İlk kullanım</a><a href="#arayuz">Arayüz düzeyleri</a><a href="#tepsi">Tepsi simgesi</a>
+  <a href="#yontemler">Yöntemler</a><a href="#dns">DNS</a><a href="#kontrol">İnternet Kontrolü</a><a href="#onarim">Otomatik onarım</a><a href="#proxy">Proxy</a><a href="#tema">Görünüm</a>
+  <a href="#sorun">Sorun giderme</a><a href="#kodlar">Hata kodları</a><a href="#betikler">Yedek betikler</a><a href="#kaldir">Kaldırma</a>
+</nav>
+
+<section id="kurulum">
+  <h2>1. Kurulum</h2>
+  <ol>
+    <li>Zip dosyasına sağ tıklayın → <b>Tümünü ayıkla</b>. Uygulamayı zip'in içinden çalıştırmayın (hata kodu <a href="#DK-103">DK-103</a>).</li>
+    <li>Çıkan klasörü kalıcı bir yere taşıyın, örneğin <code>C:\Program Files\DPI Kalkan</code> ya da <code>Belgeler</code>.</li>
+    <li><code>DPIKalkan.exe</code>'ye çift tıklayın ve yönetici iznini onaylayın. Ağ sürücüsünü yükleyebilmek için yönetici izni gerekir.</li>
+    <li>Windows "Bilgisayarınız korundu" derse: <b>Ek bilgi → Yine de çalıştır</b>. Uygulama dijital olarak imzalı olmadığı için bu uyarı çıkar.</li>
+  </ol>
+  <p>Ek bir şey kurmanız gerekmez. Gereken .NET Framework 4.8, Windows 10 ve 11'de zaten yüklüdür.</p>
+  <div class="tip warn"><b>Antivirüs uyarısı:</b> GoodbyeDPI'ın kullandığı WinDivert sürücüsü bazı antivirüs programlarında (Kaspersky, Norton, ESET…) "RiskTool" olarak görünebilir. Bu bir virüs değildir; ağ paketlerini işlediği için böyle işaretlenir. Engellenirse klasörü antivirüs istisnalarına ekleyin (bkz. <a href="#DK-204">DK-204</a>).</div>
+</section>
+
+<section id="kullanim">
+  <h2>2. İlk kullanım</h2>
+  <ol>
+    <li>Uygulama açılınca koruma kendiliğinden başlar. Kalkan <b>yeşil</b> olursa koruma çalışıyordur.</li>
+    <li><b>Discord'u Test Et</b> düğmesine basın. "Erişilebilir" ve "DNS yanıtı: doğru ✓" yazmalı.</li>
+    <li>Discord korumadan önce açıksa, bağlanabilmesi için <b>Discord'u yeniden başlat</b> düğmesine basın.</li>
+    <li>Discord yine açılmıyorsa <b>Otomatik Ayarla</b> düğmesine basın (Orta/Detaylı arayüzde adı "En iyi yöntemi bul"). Uygulama tüm yöntemleri dener ve sizin bağlantınızda çalışanı seçer.</li>
+  </ol>
+  <p>Çoğu zaman bunu yapmanız bile gerekmez: koruma açıkken Discord'a erişilemezse uygulama çalışan yöntemi <a href="#onarim">kendisi bulur</a>.</p>
+  <div class="tip"><b>"En iyi yöntemi bul" nasıl çalışır?</b> Önce engelin türünü (DNS mi, DPI mı) belirler. Sonra her yöntemi başlatır, DNS önbelleğini temizler ve Windows'un döndürdüğü adresi bağımsız DNS sunucularıyla karşılaştırır. Ardından tüm Discord sunucularına <b>iki tur</b> boyunca yeni bağlantılarla erişmeyi dener. Yalnızca bütün testleri geçen yöntem "çalışıyor" sayılır.</div>
+</section>
+
+<section id="arayuz">
+  <h2>3. Arayüz düzeyleri</h2>
+  <p>Düzeyi <b>Ayarlar → Arayüz düzeyi</b> ya da <b>Görünüm</b> sayfasından seçebilirsiniz:</p>
+  <ul>
+    <li><b>Basit</b> (varsayılan): Ana Sayfa, Sorun Giderme, Görünüm, Ayarlar. Tek düğmeyle başlat/durdur, otomatik ayarla ve sorun bul.</li>
+    <li><b>Orta</b>: Basit'e ek olarak Profiller, İnternet Kontrolü, DNS Ayarları, Hedef Siteler ve Proxy sayfaları görünür.</li>
+    <li><b>Detaylı</b>: Her şey açılır: Günlük, ağ bilgisi, komut satırları, betik dışa aktarma ve uzman ayarları.</li>
+  </ul>
+</section>
+
+<section id="tepsi">
+  <h2>4. Sistem tepsisi</h2>
+  <p>Pencereyi kapatınca ya da küçültünce uygulama saatin yanındaki kalkan simgesine iner; görev çubuğunda ve Alt+Tab'da görünmez. Simgenin rengi durumu gösterir:</p>
+  <p class="colors"><span style="background:#22c55e"></span>açık &nbsp; <span style="background:#94a3b8"></span>kapalı &nbsp; <span style="background:#f59e0b"></span>başlatılıyor &nbsp; <span style="background:#ef4444"></span>hata</p>
+  <p>Simgeye sağ tıklayınca şu işlemler çıkar: korumayı başlat/durdur, yöntem seç, Discord'u test et, en iyi yöntemi bul, Discord'u yeniden başlat.</p>
+  <p><b>Kısayol tuşu:</b> Ayarlar'dan açarsanız <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>K</kbd> ile korumayı her yerden açıp kapatabilirsiniz.</p>
+</section>
+
+<section id="yontemler">
+  <h2>5. Yöntemler (profiller)</h2>
+  <p>Uygulamada <!--PROFIL_SAYISI--> hazır yöntem var. Profiller sayfasında bir profil seçince sağ tarafta o profilin yaptığı her şey sade bir dille anlatılır. Bir seçeneğin ne işe yaradığını görmek için profil düzenleyicide imleci o seçeneğin üzerine getirin.</p>
+  <div class="tip"><b>Çalışan profili arkadaşınızla paylaşın:</b> Profiller → <b>Paylaş</b> → "Profil kodunu kopyala" ile <code>DKP1:</code> ile başlayan bir kod alırsınız. Arkadaşınız kodu kopyalayıp Profiller → Paylaş → "Koddan profil ekle" der.</div>
+  <div class="tip"><b>Eski 1 ve 2 numaralı betikler neden çalışmaz oldu?</b> Türkiye'de Discord iki katmanda engelleniyor: DNS ve DPI. Bu iki betikte DNS yönlendirmesi yoktu ve sabit TTL kullanıyorlardı. 3 ve 4 numaralı betikler DNS'i yönlendirdiği için çalışmaya devam etti. Eski betiklerin DNS eklenmiş sürümleri de listede.</div>
+  <!--PROFILLER-->
+</section>
+
+<section id="dns">
+  <h2>6. DNS</h2>
+  <p><b>DNS yönlendirme</b> (profil içinde): Bilgisayarın tüm DNS sorguları, servis sağlayıcı yerine standart dışı bir porttaki güvenli sunucuya gider. Seçenekler: Yandex 1253, AdGuard 5353, Quad9 9953, OpenDNS 5353. Türkiye'de Discord için bu <b>zorunludur</b>.</p>
+  <p><b>DNS Ayarları sayfası</b> (Orta/Detaylı): Windows'un kendi DNS sunucusunu Cloudflare, Google, Quad9 gibi bir sunucuyla değiştirir. Windows 11'de isterseniz şifreli DNS (DoH) da açılır. Böylece DPI Kalkan kapalıyken bile DNS engeli aşılır. Önceki ayarlar yedeklenir ve <b>Eski ayarlara dön</b> ile geri alınabilir.</p>
+</section>
+
+<section id="kontrol">
+  <h2>7. İnternet Kontrolü</h2>
+  <ul>
+    <li><b>Bağlantı Testi</b>: Discord sunucularına yeni şifreli bağlantı açar. Her satırda süre, IP adresi, ayrıntı ve varsa hata kodu görünür.</li>
+    <li><b>Site Analizi</b>: Bir siteyi adım adım inceler (DNS, TCP, TLS, HTTP) ve sonucu söyler: "YALNIZCA DNS ENGELİ", "DPI (SNI) ENGELİ", "IP ENGELİ" ya da "ERİŞİLEBİLİR".</li>
+    <li><b>DNS Sunucuları</b>: Tüm DNS sunucularının hızını ve yanıtının doğru olup olmadığını gösterir. En hızlı doğru sunucuyu kullanan profile tek tıkla geçebilirsiniz.</li>
+    <li><b>Hız Testi</b>: Gecikme, indirme ve yükleme hızını Cloudflare'in hız sunucusuyla ölçer (~60 MB veri harcar).</li>
+    <li><b>Geçmiş</b>: Tüm bağlantı testleri, otomatik onarımlar ve taramalar grafikte ve listede görünür; son 24 saatteki başarı oranı hesaplanır.</li>
+    <li><b>Ağ Bilgisi</b> (yalnızca Detaylı arayüzde): Ağ bağdaştırıcıları, DNS'ler, proxy, VPN, antivirüs ve hosts dosyası.</li>
+  </ul>
+</section>
+
+<section id="onarim">
+  <h2>8. Otomatik onarım ve bağlantı bekçisi</h2>
+  <p>Servis sağlayıcılar engelleme yöntemlerini zaman zaman değiştirir; farklı servis sağlayıcılarda farklı yöntemler çalışır. Örneğin bir hatta "-9" modu çalışırken başka bir hatta yalnızca "Otomatik TTL (-5)" çalışabilir. DPI Kalkan bunu kendisi halleder:</p>
+  <ul>
+    <li><b>Otomatik onarım</b> (varsayılan açık): Koruma başladıktan sonra Discord sunucularına erişilemezse yöntemler sırayla denenir ve çalışan seçilir. Size bildirimle haber verilir.</li>
+    <li><b>Akıllı tarama</b>: Bir DPI yöntemi başarısız olursa aynı yöntemin yalnızca DNS'i farklı kopyaları denenmez. Örneğin -9 çalışmıyorsa dört -9'lu profil yerine doğrudan -5'e geçilir; tarama birkaç saniyede biter.</li>
+    <li><b>Bağlantı bekçisi</b> (Orta/Detaylı arayüzde ayarlanır): 5, 15 ya da 30 dakikada bir ve ağ değiştiğinde (ör. başka bir Wi-Fi'ye geçince) erişim sessizce test edilir; sorun varsa onarım başlar.</li>
+  </ul>
+  <p>Onarım her 10 dakikada en fazla bir kez çalışır. Ayarlar → Koruma bölümünden kapatılabilir.</p>
+  <p><b>Ayarları taşıma:</b> Ayarlar → Yedekleme → <b>Ayarları dışa aktar</b> tüm ayarlarınızı (yöntemler, özel profiller, tema, proxy'ler) tek dosyaya kaydeder; yeni bilgisayarda ya da arkadaşınızda <b>Ayarları içe aktar</b> ile yüklenir.</p>
+</section>
+
+<section id="proxy">
+  <h2>9. Proxy</h2>
+  <p>Hiçbir yöntem işe yaramıyorsa (ör. Site Analizi "IP ENGELİ" diyorsa) trafiği bir proxy sunucusu üzerinden geçirebilirsiniz. Proxy adresini kendiniz edinmeniz gerekir; uygulama proxy sağlamaz. Proxy sayfası Orta ve Detaylı arayüzde görünür.</p>
+  <ol>
+    <li>Proxy bilgilerini <b>Hızlı giriş</b> kutusuna yapıştırıp <b>Doldur</b>'a basın. Kabul edilen biçimler: <code>185.12.34.56:8080</code>, <code>socks5://kullanıcı:şifre@1.2.3.4:1080</code>, <code>ip:port:kullanıcı:şifre</code>.</li>
+    <li><b>Test et</b>: Proxy üzerinden discord.com'a şifreli bağlantı kurulur. Sonuçta gecikme, proxy'nin çıkış IP'si ve ülkesi gösterilir. Hata varsa kodu (DK-805/806/807) yazılır.</li>
+    <li><b>Kaydet</b>, sonra kullanım şeklini seçin:
+      <ul>
+        <li><b>Discord'u bu proxy ile aç</b> (önerilen): Yalnızca Discord proxy'den geçer, diğer programlar etkilenmez. <b>Masaüstüne kısayol</b> ile kalıcı hale getirebilirsiniz. Normale dönmek için <b>Discord'u proxy'siz aç</b>.</li>
+        <li><b>Windows proxy'si yap</b>: Tarayıcılar dahil sistem proxy'sini kullanan tüm programlar proxy'den geçer. Eski ayar yedeklenir; <b>Windows proxy'sini kapat</b> ile geri alınır.</li>
+      </ul>
+    </li>
+  </ol>
+  <h3>Toplu ekleme</h3>
+  <p>Bir proxy listeniz varsa <b>Toplu ekle</b>'ye basın, listeyi yapıştırın (her satıra bir proxy) ve <b>Hepsini test et</b> deyin. Yüzlerce proxy aynı anda denenir; yalnızca Discord'a ulaşabilenler en hızlıdan başlayarak eklenir. Türü yanlış yazılmış proxy'lerin türü (HTTP ↔ SOCKS5) test sırasında kendiliğinden düzeltilir.</p>
+  <h3>Program bazlı proxy (yalnızca seçtiğiniz programlar)</h3>
+  <p><b>Program bazlı proxy</b> sekmesinde <b>Program ekle</b> ile bir program seçin (bilgisayarınızdaki Chrome, Edge, Opera, Firefox, Discord gibi programlar listede hazır çıkar; başka bir .exe de seçebilirsiniz) ve hangi proxy'yi kullanacağını belirleyin. <b>Proxy ile aç</b> o programı proxy'li açar, <b>Kısayol</b> masaüstüne kalıcı bir başlatıcı koyar. Diğer programlar ve Windows ayarları etkilenmez.</p>
+  <ul>
+    <li><b>Chromium tabanlı programlar</b> (Chrome, Edge, Brave, Opera, Vivaldi, Discord, Spotify, VS Code…) <code>--proxy-server</code> parametresiyle açılır. Tarayıcılar için varsayılan olarak <b>ayrı bir profil</b> kullanılır; böylece normal tarayıcınız açıkken de proxy'li ayrı bir pencere açılabilir.</li>
+    <li><b>Firefox</b> ayarları proxy'ye yönlendirilmiş ayrı bir profille açılır.</li>
+    <li><b>Diğer programlar</b> HTTP_PROXY/HTTPS_PROXY ortam değişkenleriyle açılır; program bunu desteklemiyorsa etkisi olmaz.</li>
+    <li><b>Yerel köprü</b>: Kullanıcı adı/şifre isteyen proxy'lerde DPI Kalkan bilgisayarınızda (yalnızca 127.0.0.1) şifresiz bir köprü açar ve şifreyi kendisi ekler. Bu durumda proxy'li programı kullanırken DPI Kalkan açık (tepside) olmalıdır.</li>
+  </ul>
+  <div class="tip warn">Discord sesli sohbeti (UDP) proxy'den geçmez. Discord, kullanıcı adı/şifre isteyen SOCKS5 proxy'leri desteklemez; bu durumda HTTP proxy kullanın. Proxy şifreleri Windows tarafından şifrelenerek saklanır. Güvenmediğiniz ücretsiz proxy'ler trafiğinizi görebilir; şifresiz (HTTPS olmayan) sitelerde dikkatli olun.</div>
+</section>
+
+<section id="tema">
+  <h2>10. Görünüm ve renkler</h2>
+  <p>Varsayılan <b>Sistem</b> teması Windows'un açık/koyu modunu ve vurgu rengini kullanır; Windows'ta rengi değiştirince uygulama da değişir. Bunun yanında 20 hazır tema var: Açık, Koyu, Zümrüt, Okyanus, Lavanta, Sakura, Nord, Dracula, One Dark, Monokai, Tokyo Night, Catppuccin, Gruvbox, Solarized, GitHub, Gün Batımı ve Yüksek Kontrast.</p>
+  <p><b>Özel renkler</b>: Uygulamadaki 12 rengin her birini değiştirebilirsiniz (vurgu, arka plan, kart, metin, kenar çubuğu, başarı, uyarı, hata, günlük…). Renk kodunu <code>#2563EB</code>, <code>2563EB</code>, <code>#FFF</code> ya da <code>37,99,235</code> biçiminde yazabilir veya renk kutusuna tıklayıp seçebilirsiniz. <b>Tema kodunu kopyala</b> ile temanızı arkadaşınıza gönderebilirsiniz; o da <b>Tema kodunu yapıştır</b> ile aynı renkleri kullanır.</p>
+</section>
+
+<section id="sorun">
+  <h2>11. Sorun giderme</h2>
+  <ol>
+    <li><b>Sorun Giderme → Tam kontrolü başlat</b>: Yönetici izni, dosyalar, BFE hizmeti, çakışan programlar, VPN/proxy, antivirüs, internet, saat, hosts dosyası, DNS, koruma ve Discord sunucuları kontrol edilir (~20 nokta). Bulunan her sorunun yanında <b>Düzelt</b> düğmesi çıkar.</li>
+    <li><b>Hata Kodları ve Çözümleri</b> sekmesinde tüm hata kodlarını kategoriye göre süzebilir ya da arayabilirsiniz.</li>
+    <li>Yardım isterken hata kodunu (ör. <code>DK-204</code>) söylemeniz yeterli. Kopyala düğmesi açıklamanın tamamını panoya alır.</li>
+  </ol>
+  <h3>En sık durumlar</h3>
+  <ul>
+    <li><b>Kalkan kırmızı, "Sürücü engellendi"</b>: Antivirüs WinDivert'i engelliyor → <a href="#DK-204">DK-204</a>.</li>
+    <li><b>Kalkan yeşil ama Discord "Bağlanılıyor…"da kalıyor</b>: Discord'u yeniden başlatın → <a href="#DK-901">DK-901</a>.</li>
+    <li><b>"DNS yanıtı: YANLIŞ"</b>: Profilde DNS yönlendirmesi yok ya da çalışmıyor → <a href="#DK-403">DK-403</a>.</li>
+    <li><b>Hiçbir yöntem çalışmıyor</b>: Site Analizi'ni çalıştırın. "IP engeli" çıkarsa yalnızca VPN işe yarar → <a href="#DK-503">DK-503</a>.</li>
+  </ul>
+</section>
+
+<section id="kodlar">
+  <h2>12. Hata kodları (<!--HATA_SAYISI-->)</h2>
+  <p>Ayrıntıları ve çözüm adımlarını görmek için bir koda tıklayın.</p>
+  <!--HATA_KODLARI-->
+</section>
+
+<section id="betikler">
+  <h2>13. Yedek betikler</h2>
+  <p><code>betikler</code> klasöründeki <code>.cmd</code> dosyaları GoodbyeDPI'ı uygulama olmadan doğrudan çalıştırır. Her hazır yöntem için bir dosya var. Uygulama açılmazsa ya da bir yöntemi elle denemek isterseniz kullanabilirsiniz. Bir betiği çalıştırmadan önce DPI Kalkan'dan çıkın, aynı anda yalnızca bir betik çalıştırın. <code>durdur.cmd</code> çalışan GoodbyeDPI'ı kapatır; <code>sifirla.cmd</code> hizmetleri ve sürücü kaydını temizler.</p>
+</section>
+
+<section id="kaldir">
+  <h2>14. Kaldırma</h2>
+  <ol>
+    <li>Ayarlar'da <b>Windows açılışında başlat</b> ve <b>Arka plan hizmeti modu</b> seçeneklerini kapatın.</li>
+    <li>DNS Ayarları sayfasında değişiklik yaptıysanız <b>Eski ayarlara dön</b>; Proxy sayfasında Windows proxy'si ayarladıysanız <b>Windows proxy'sini kapat</b> düğmesine basın.</li>
+    <li>Tepsi simgesine sağ tıklayıp <b>Çıkış</b> deyin ve klasörü silin. Program bazlı proxy için oluşturulan tarayıcı profilleri <code>%LOCALAPPDATA%\DPI Kalkan</code> klasöründedir; onu da silebilirsiniz.</li>
+  </ol>
+  <p style="color:var(--muted)">GoodbyeDPI © ValdikSS (Apache 2.0) · WinDivert © basil00 (LGPLv3). Lisans metinleri <code>lisanslar</code> klasöründedir. DPI Kalkan bir VPN değildir: trafiğinizi şifrelemez ve IP adresinizi değiştirmez. Proje sayfası, yeni sürümler ve kaynak kod: <a href="https://github.com/Mr-Leywin/dpi-kalkan">github.com/Mr-Leywin/dpi-kalkan</a></p>
+</section>
+</div>
+</body>
+</html>
