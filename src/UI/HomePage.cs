@@ -21,6 +21,8 @@ namespace DPIKalkan
         readonly ThemedCombo pCombo;
         readonly Timer tick = new Timer { Interval = 1000 };
         DetectedProblem shownProblem;
+        bool showingUpdate;
+        static bool updateDismissed;
         string hintOverride;
         bool filling;
 
@@ -48,6 +50,7 @@ namespace DPIKalkan
             bannerMore = banner.Add(new FlatBtn { Text = "Ayrıntı", Glyph = GHelp, Kind = FlatBtn.Kinds.Ghost, Bounds = R(654, 11, 100, 34) });
             bannerFix.Click += async (s, e) =>
             {
+                if (showingUpdate) { if (Updater.Available != null) UpdateDialog.ShowFor(FindForm(), Updater.Available); return; }
                 var p = shownProblem;
                 if (p?.Info == null) return;
                 bannerFix.Enabled = false;
@@ -58,7 +61,12 @@ namespace DPIKalkan
                 if (p.Code == "DK-901" || p.Code == "DK-103") App.Problems.Clear(p.Code);
                 UpdateAll();
             };
-            bannerMore.Click += (s, e) => { var p = shownProblem; MainForm.Instance.Go<TroublePage>("trouble")?.ShowCode(p?.Code); };
+            bannerMore.Click += (s, e) =>
+            {
+                if (showingUpdate) { updateDismissed = true; UpdateAll(); return; }
+                var p = shownProblem;
+                MainForm.Instance.Go<TroublePage>("trouble")?.ShowCode(p?.Code);
+            };
             banner.Visible = false;
 
             if (simple)
@@ -279,7 +287,31 @@ namespace DPIKalkan
                 bannerFix.Bounds = R(648 - fw, 11, fw, 34);
                 bannerTitle.Width = bannerText.Width = D(648 - fw - 58);
             }
-            Arrange(problem != null);
+            // sorun yoksa ve yeni sürüm varsa güncelleme bandı
+            var upd = Updater.Available;
+            showingUpdate = problem == null && upd != null && !updateDismissed && !Updater.Skipped(upd) && !Actions.Scanning;
+            if (showingUpdate)
+            {
+                banner.Fill = AccentSoft;
+                banner.Stroke = AccentBorder;
+                bannerIcon.Text = GRefresh;
+                bannerIcon.ForeColor = AccentInk;
+                bannerTitle.Text = "Yeni sürüm hazır: DPI Kalkan " + upd.Version;
+                bannerText.Text = "Yenilikleri görmek ve tek tıkla kurmak için 'Güncelle'ye basın. Ayarlarınız korunur.";
+                bannerFix.Visible = true;
+                bannerFix.Text = "Güncelle";
+                bannerFix.Kind = FlatBtn.Kinds.Primary;
+                bannerFix.Bounds = R(518, 11, 130, 34);
+                bannerMore.Text = "Sonra";
+                bannerMore.Glyph = null;
+                bannerTitle.Width = bannerText.Width = D(460);
+            }
+            else
+            {
+                bannerMore.Text = "Ayrıntı";
+                bannerMore.Glyph = GHelp;
+            }
+            Arrange(problem != null || showingUpdate);
 
             // ------------------------------------------------ yöntem kartı
             if (pCombo != null && !pCombo.DroppedDown) FillCombo();

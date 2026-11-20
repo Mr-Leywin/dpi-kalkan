@@ -1,0 +1,83 @@
+# Her gönderimde derler ve birim testlerini çalıştırır.
+# "v" ile başlayan bir etiket gönderildiğinde (ör. v2.3.0) paketi GitHub sürümü olarak yayımlar;
+# uygulamanın otomatik güncelleme özelliği bu sürümleri kullanır.
+name: Derleme
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derle ve paketle
+        shell: powershell
+        run: ./build.ps1
+
+      - name: Birim testleri
+        shell: powershell
+        run: |
+          Start-Process build\DPIKalkan.preview.exe -ArgumentList '--selftest', "$pwd\selftest.txt" -Wait -NoNewWindow
+          Get-Content selftest.txt -Encoding UTF8
+          if (-not (Test-Path selftest.txt)) { throw 'Test çıktısı yok' }
+          if (Select-String -Path selftest.txt -Pattern '^FAIL' -Quiet) { throw 'Birim testi başarısız' }
+
+      - name: Sürüm etiketi kodla uyumlu mu?
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          if (-not (Test-Path "dist\DPI-Kalkan-$v.zip")) { throw "Etiket ($v) ile src\Program.cs içindeki sürüm uyuşmuyor." }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DPI-Kalkan
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: DPI-Kalkan
+          path: dist
+
+      - name: GitHub sürümünü yayımla
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          $zip = "dist\DPI-Kalkan-$v.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          $cl = [IO.File]::ReadAllText("$pwd\CHANGELOG.md", [Text.Encoding]::UTF8)
+          $m = [regex]::Match($cl, "(?ms)^## \[?$([regex]::Escape($v))\]?[^\n]*\n(.*?)(?=^## |\z)")
+          $body = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "DPI Kalkan $v" }
+          $notes = "$body`n`n### Kurulum`n1. Aşağıdan **DPI-Kalkan-$v.zip** dosyasını indirin, sağ tıklayıp **Tümünü ayıkla** deyin.`n2. **DPIKalkan.exe**'yi çalıştırıp yönetici iznini onaylayın. Windows uyarı verirse **Ek bilgi → Yine de çalıştır**.`n3. Önceki bir sürüm kuruluysa uygulama kendini otomatik günceller (Ayarlar → Güncellemeler).`n`n**SHA-256** (DPI-Kalkan-$v.zip): ``$hash``"
+          [IO.File]::WriteAllText("$pwd\notes.md", $notes, (New-Object Text.UTF8Encoding $false))
+          gh release view $env:GITHUB_REF_NAME 2>$null
+          if ($LASTEXITCODE -eq 0) { Write-Host 'Bu sürüm zaten yayımlanmış; yeniden yayımlanmadı.'; exit 0 }
+          gh release create $env:GITHUB_REF_NAME $zip "$zip.sha256" --title "DPI Kalkan $v" --notes-file notes.md --latest

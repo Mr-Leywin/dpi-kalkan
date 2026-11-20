@@ -43,9 +43,40 @@ namespace DPIKalkan
             bRun = new FlatBtn { Text = "Tam kontrolü başlat", Glyph = GSearch, Kind = FlatBtn.Kinds.Primary, Bounds = R(28, 0, 220, 40), BackColor = Bg };
             pCheck.Controls.Add(bRun);
             bRun.Click += async (s, e) => await RunCheck();
-            runStatus = UIx.L("Kurulumdan Discord'a kadar ~20 nokta kontrol edilir (10-20 saniye). Bulunan her sorun için 'Düzelt' düğmesi çıkar.",
-                Small, Muted, 260, 0, 530, 40, ContentAlignment.MiddleLeft);
+            runStatus = UIx.L("Kurulumdan Discord'a ~20 nokta 10-20 saniyede kontrol edilir.",
+                Small, Muted, 258, 0, 270, 40, ContentAlignment.MiddleLeft);
             pCheck.Controls.Add(runStatus);
+            var bPack = new FlatBtn { Text = "Destek paketi", Glyph = GSave, Kind = FlatBtn.Kinds.Secondary, Bounds = R(534, 2, 128, 36), BackColor = Bg, Font = Small };
+            var bIssue = new FlatBtn { Text = "Sorun bildir", Glyph = GLink, Kind = FlatBtn.Kinds.Secondary, Bounds = R(668, 2, 124, 36), BackColor = Bg, Font = Small };
+            pCheck.Controls.Add(bPack);
+            pCheck.Controls.Add(bIssue);
+            new ToolTip().SetToolTip(bPack, "Günlük, geçmiş ve ayarları (IP adresleri, kullanıcı adı ve proxy bilgileri gizlenmiş olarak) tek bir zip dosyasına kaydeder.");
+            new ToolTip().SetToolTip(bIssue, "GitHub'da sürüm, Windows ve hata kodu bilgileri doldurulmuş yeni bir sorun sayfası açar; göndermeden önce düzenleyebilirsiniz.");
+            bPack.Click += async (s, e) =>
+            {
+                using (var d = new SaveFileDialog { FileName = "DPI-Kalkan-destek-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".zip", Filter = "Zip dosyası|*.zip" })
+                {
+                    if (d.ShowDialog(FindForm()) != DialogResult.OK) return;
+                    bPack.Enabled = false;
+                    try
+                    {
+                        string path = d.FileName;
+                        await Task.Run(() => Support.CreatePackage(path));
+                        Sys.SelectFile(path);
+                        MessageBox.Show(FindForm(), "Destek paketi kaydedildi. IP adresleri, kullanıcı adı, e-posta ve proxy bilgileri gizlendi.\n\n" +
+                                        "Yardım isterken bu dosyayı (ör. GitHub'daki sorun kaydına) ekleyebilirsiniz.", App.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex) { MessageBox.Show(FindForm(), "Oluşturulamadı: " + ex.Message, App.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                    finally { if (!IsDisposed) bPack.Enabled = true; }
+                }
+            };
+            bIssue.Click += (s, e) =>
+            {
+                if (MessageBox.Show(FindForm(), "Tarayıcıda GitHub'ın yeni sorun sayfası açılacak. Sürüm, Windows derlemesi, hata kodu ve kısa bir özet (IP adresleri gizlenmiş) önceden doldurulur; " +
+                                    "göndermeden önce görüp düzenleyebilirsiniz. Göndermek için GitHub hesabı gerekir.\n\nDevam edilsin mi?", App.Name,
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    Sys.OpenAsUser(Support.IssueUrl());
+            };
             rowsArea = new ScrollArea { Bounds = R(18, 52, 790, 462) };
             pCheck.Controls.Add(rowsArea);
 

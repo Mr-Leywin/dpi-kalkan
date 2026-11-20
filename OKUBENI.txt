@@ -1,4 +1,4 @@
-DPI KALKAN 2.2.0
+DPI KALKAN 2.3.0
 ================
 
 GoodbyeDPI için kolay kullanımlı internet erişim kalkanı. Servis sağlayıcıların
@@ -61,6 +61,10 @@ PAYLAŞMA VE KISAYOL
 - Ayarlar → "Kısayol tuşu": Ctrl+Alt+K ile korumayı her yerden aç/kapat.
 - Ayarlar → Yedekleme: tüm ayarları dosyaya kaydedin / başka bilgisayara yükleyin.
 - İnternet Kontrolü → Hız Testi ve Geçmiş (grafikli bağlantı geçmişi).
+- Güncelleme: yeni sürüm çıkınca ana sayfada "Güncelle" düğmesi görünür; paket
+  SHA-256 ile doğrulanıp ayarlar korunarak kurulur (Ayarlar → Güncellemeler).
+- Yardım: Sorun Giderme → "Destek paketi" (kişisel bilgiler gizlenir) ve
+  "Sorun bildir" (GitHub). Proje sayfası: https://github.com/Mr-Leywin/dpi-kalkan
 
 GÖRÜNÜM
 -------

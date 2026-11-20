@@ -23,12 +23,13 @@ namespace DPIKalkan
 
         readonly NotifyIcon tray;
         readonly ContextMenuStrip trayMenu;
-        ToolStripMenuItem miStatus, miToggle, miProfiles, miTest, miScan, miDiscord, miOpen, miExit;
+        ToolStripMenuItem miStatus, miToggle, miProfiles, miTest, miScan, miDiscord, miUpdate, miOpen, miExit;
         readonly Dictionary<EngineState, Icon> trayIcons = new Dictionary<EngineState, Icon>();
         readonly Timer pollTimer = new Timer { Interval = 3000 };
         readonly Timer themeTimer = new Timer { Interval = 600 };
         readonly Timer watchTimer = new Timer();
         readonly Timer netChangeTimer = new Timer { Interval = 10000 };
+        readonly Timer updateTimer = new Timer { Interval = 45000 };   // ilk denetim açılıştan 45 sn sonra
         bool exiting;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
@@ -343,6 +344,7 @@ namespace DPIKalkan
                     ok == total ? ToolTipIcon.Info : ToolTipIcon.Warning, force: true);
             });
             miScan = new ToolStripMenuItem("En iyi yöntemi bul…", null, (s, e) => { ShowFromTray(); ScanDialog.Run(this); });
+            miUpdate = new ToolStripMenuItem("Güncelle", null, (s, e) => { ShowFromTray(); if (Updater.Available != null) UpdateDialog.ShowFor(this, Updater.Available); }) { Font = Bold, Visible = false };
             miDiscord = new ToolStripMenuItem("Discord'u yeniden başlat", null, async (s, e) =>
             {
                 string msg = await Actions.RestartDiscordAsync();
@@ -352,7 +354,7 @@ namespace DPIKalkan
             miExit = new ToolStripMenuItem("Çıkış", null, (s, e) => ExitApp());
             m.Items.AddRange(new ToolStripItem[]
             {
-                miStatus, new ToolStripSeparator(), miToggle, miProfiles, miTest, miScan, miDiscord, new ToolStripSeparator(), miOpen, miExit
+                miStatus, new ToolStripSeparator(), miToggle, miProfiles, miTest, miScan, miDiscord, miUpdate, new ToolStripSeparator(), miOpen, miExit
             });
             m.Opening += (s, e) =>
             {
@@ -371,6 +373,8 @@ namespace DPIKalkan
                 miTest.Enabled = !Actions.Testing && !Actions.Scanning;
                 miScan.Enabled = !Actions.Scanning;
                 miDiscord.Visible = DiscordHelper.IsRunning;
+                miUpdate.Visible = Updater.Available != null;
+                if (Updater.Available != null) miUpdate.Text = "Güncelle: sürüm " + Updater.Available.Version;
             };
             return m;
         }
@@ -506,10 +510,28 @@ namespace DPIKalkan
             Application.Exit();
         }
 
-        public async void AfterStartup(bool fromTray, bool scan, bool scanAll = false)
+        public async void AfterStartup(bool fromTray, bool scan, bool scanAll = false, string updatedFrom = null, bool updateFailed = false, bool resume = false)
         {
             App.Log(App.Name + " " + App.Version + " başlatıldı (" + LevelName(App.Settings.UiLevel) + " arayüz, tema: " + Theme.Current?.Name + ").", LogLevel.Info);
             if (App.Preview) return;
+            if (updatedFrom != null)
+            {
+                App.Log("Güncelleme tamamlandı: " + updatedFrom + " → " + App.Version, LogLevel.Success);
+                ShowBalloon("DPI Kalkan güncellendi", "Sürüm " + updatedFrom + " → " + App.Version + ". Ayarlarınız korundu.", ToolTipIcon.Info, force: true);
+                History.Add(new HistoryEntry { Time = DateTime.Now, Kind = "güncelleme", Profile = App.Version, Ok = 1, Total = 1, Running = true, Note = updatedFrom + " → " + App.Version });
+                _ = Task.Delay(15000).ContinueWith(_ => Updater.Cleanup());
+            }
+            if (updateFailed)
+            {
+                App.Log("Güncelleme başarısız oldu; önceki sürüme dönüldü. Ayrıntı: veri\\guncelleme.log", LogLevel.Error);
+                ShowBalloon("Güncelleme yapılamadı", "Önceki sürüme dönüldü. Ayrıntı: veri\\guncelleme.log", ToolTipIcon.Warning, force: true);
+            }
+            updateTimer.Tick += async (s, e) =>
+            {
+                updateTimer.Interval = 6 * 60 * 60 * 1000;
+                if (Updater.DueForCheck && !Actions.Scanning) await UpdateDialog.CheckAndShow(this, manual: false);
+            };
+            updateTimer.Start();
             string missing = Engine.MissingFile();
             if (missing != null) App.Log("[DK-102] " + missing + " bulunamadı: " + Engine.BinDir, LogLevel.Error);
             if (App.RunningFromTemp)
@@ -544,7 +566,7 @@ namespace DPIKalkan
                 ScanDialog.Run(this, autoStart: true, full: scanAll);
             }
             else if (repointed) { }
-            else if (App.Settings.AutoStartProtection && App.Engine.State != EngineState.Running)
+            else if ((App.Settings.AutoStartProtection || resume) && App.Engine.State != EngineState.Running)
             {
                 if (App.Engine.ExternalCount > 0)
                     App.Log("Uygulama dışında çalışan GoodbyeDPI bulundu; devralınıyor.", LogLevel.Warn);
@@ -561,6 +583,7 @@ namespace DPIKalkan
                 SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
                 System.Net.NetworkInformation.NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
                 watchTimer.Dispose();
+                updateTimer.Dispose();
                 netChangeTimer.Dispose();
                 tray.Visible = false;
                 tray.Dispose();

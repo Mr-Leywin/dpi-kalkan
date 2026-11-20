@@ -219,6 +219,36 @@ namespace DPIKalkan
                 bReset.Enabled = true;
             };
 
+            // ------------------------------------------------ güncellemeler
+            Caption("GÜNCELLEMELER");
+            var cu = new Card { Bounds = R(28, y, 764, 124) };
+            scroll.Controls.Add(cu);
+            y += 124 + 22;
+            var rUpd = new ToggleRow("Güncellemeleri otomatik denetle",
+                "Günde bir kez GitHub'daki yeni sürüm denetlenir; yeni sürüm varsa bildirilir. Kurulum her zaman sizin onayınızla ve SHA-256 doğrulamasıyla yapılır.",
+                D(744)) { Location = new Point(D(10), D(6)), Divider = false };
+            cu.Add(rUpd);
+            rUpd.Switch.SetSilently(App.Settings.AutoUpdate);
+            rUpd.Switch.CheckedChanged += (s, e) => { App.Settings.AutoUpdate = rUpd.Switch.Checked; App.Save(); };
+            var bCheck = cu.Add(new FlatBtn { Text = "Şimdi denetle", Glyph = GRefresh, Kind = FlatBtn.Kinds.Secondary, Bounds = R(30, 74, 170, 36) });
+            var updInfo = cu.Add(UIx.L("", Small, Muted, 212, 74, 530, 36, ContentAlignment.MiddleLeft));
+            Action showUpd = () =>
+            {
+                var last = App.Settings.LastUpdateCheck;
+                updInfo.Text = "Sürüm " + App.Version + " · Son denetim: " + (last.HasValue ? last.Value.ToString("dd.MM.yyyy HH:mm") : "hiç") +
+                               (Updater.Available != null ? " · Yeni sürüm hazır: " + Updater.Available.Version : "");
+                updInfo.ForeColor = Updater.Available != null ? AccentInk : Muted;
+            };
+            showUpd();
+            bCheck.Click += async (s, e) =>
+            {
+                bCheck.Enabled = false;
+                await UpdateDialog.CheckAndShow(FindForm(), manual: true);
+                if (IsDisposed) return;
+                bCheck.Enabled = true;
+                showUpd();
+            };
+
             // ------------------------------------------------ yedekleme
             if (Level(UiLevel.Orta))
             {
@@ -479,6 +509,14 @@ namespace DPIKalkan
             var c2 = AddCard(28, 292, 764, 336);
             var r = c2.Add(new ReportBox { Bounds = R(20, 14, 724, 310) });
             r.BackColor = Theme.Card;
+            r.Out("2.3'TE YENİ", Muted, Theme.Caption);
+            foreach (var line in new[]
+            {
+                "Otomatik güncelleme: yeni sürüm GitHub'dan SHA-256 doğrulamasıyla indirilir ve ayarlar korunarak kurulur (Ayarlar → Güncellemeler).",
+                "Sorun Giderme: kişisel bilgileri gizlenmiş destek paketi ve GitHub'da tek tıkla sorun bildirme.",
+            })
+                r.Out("•  " + line, Theme.Text, Small);
+            r.Blank();
             r.Out("2.2'DE YENİ", Muted, Theme.Caption);
             foreach (var line in new[]
             {

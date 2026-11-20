@@ -10,8 +10,10 @@ $root    = $PSScriptRoot
 $tp      = Join-Path $root 'third_party\goodbyedpi'
 $build   = Join-Path $root 'build'
 $dist    = Join-Path $root 'dist'
-$version = '2.2.0'
-$appDir  = Join-Path $build "paket\DPI-Kalkan-$version"
+# sürüm tek yerden gelir: src\Program.cs içindeki AssemblyVersion
+$version = [regex]::Match((Get-Content (Join-Path $root 'src\Program.cs') -Raw), 'AssemblyVersion\("(\d+\.\d+\.\d+)').Groups[1].Value
+if (-not $version) { throw 'Sürüm numarası src\Program.cs içinde bulunamadı.' }
+$appDir  = Join-Path $build "paket\DPI Kalkan"
 
 $csc = Get-ChildItem "$env:ProgramFiles\dotnet\sdk\*\Roslyn\bincore\csc.dll" -ErrorAction SilentlyContinue |
        Sort-Object FullName | Select-Object -Last 1
@@ -21,7 +23,8 @@ if (-not (Test-Path $fw)) { $fw = "$env:WINDIR\Microsoft.NET\Framework\v4.0.3031
 
 New-Item -ItemType Directory -Force $build, $dist | Out-Null
 $refs = 'mscorlib','System','System.Core','System.Drawing','System.Windows.Forms','System.Xml',
-        'System.ServiceProcess','System.Management','System.Security' | ForEach-Object { "-r:`"$fw\$_.dll`"" }
+        'System.ServiceProcess','System.Management','System.Security',
+        'System.Web.Extensions','System.IO.Compression','System.IO.Compression.FileSystem' | ForEach-Object { "-r:`"$fw\$_.dll`"" }
 $src  = Get-ChildItem (Join-Path $root 'src') -Recurse -Filter *.cs | ForEach-Object { "`"$($_.FullName)`"" }
 
 function Invoke-Csc([string]$out, [string[]]$extra) {
@@ -76,5 +79,10 @@ if (-not (Test-Path "$appDir\betikler\01_turkiye_onerilen.cmd")) { throw 'Betikl
 # 4) Zip paketi
 $zip = Join-Path $dist "DPI-Kalkan-$version.zip"
 if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path $appDir -DestinationPath $zip -CompressionLevel Optimal
+# .NET ZipFile: zip standardına uygun '/' ayırıcıları kullanır (Compress-Archive '' yazar)
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[IO.Compression.ZipFile]::CreateFromDirectory($appDir, $zip, [IO.Compression.CompressionLevel]::Optimal, $true)
+$hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+Set-Content -Path "$zip.sha256" -Value "$hash  DPI-Kalkan-$version.zip" -Encoding ASCII
 Write-Host ">> Tamam: $zip"
+Write-Host ">> SHA-256: $hash"

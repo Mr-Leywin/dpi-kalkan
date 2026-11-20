@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Kullanım rehberi
+    url: https://github.com/Mr-Leywin/dpi-kalkan#readme
+    about: Kurulum, yöntemler, hata kodları ve çözümleri (pakette Rehber.html olarak da var).
+  - name: Güvenlik açığı bildir (gizli)
+    url: https://github.com/Mr-Leywin/dpi-kalkan/security/advisories/new
+    about: Güvenlik sorunlarını herkese açık sorun kaydı yerine buradan gizlice bildirin.

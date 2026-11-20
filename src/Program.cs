@@ -13,8 +13,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("GoodbyeDPI kontrol paneli ve internet erişim kalkanı")]
 [assembly: AssemblyProduct("DPI Kalkan")]
 [assembly: AssemblyCopyright("GoodbyeDPI © ValdikSS · WinDivert © basil00")]
-[assembly: AssemblyVersion("2.2.0.0")]
-[assembly: AssemblyFileVersion("2.2.0.0")]
+[assembly: AssemblyVersion("2.3.0.0")]
+[assembly: AssemblyFileVersion("2.3.0.0")]
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace DPIKalkan
@@ -24,6 +24,10 @@ namespace DPIKalkan
         [STAThread]
         static int Main(string[] args)
         {
+            // Güncelleme kurulumu: yeni sürümün exe'si tarafından, tek kopya kilidi ve yönetici denetiminden önce çalışır
+            int ui = Array.IndexOf(args, "--apply-update");
+            if (ui >= 0 && args.Length >= ui + 5 && int.TryParse(args[ui + 3], out int oldPid))
+                return Updater.Apply(args[ui + 1], args[ui + 2], oldPid, args[ui + 4], args.Length > ui + 5 && args[ui + 5] == "1");
 #if PREVIEW
             App.Preview = true;
             int mi = Array.IndexOf(args, "--make-icon");
@@ -72,6 +76,10 @@ namespace DPIKalkan
             bool tray = args.Any(a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase));
             bool scanAll = args.Any(a => a.Equals("--scan-all", StringComparison.OrdinalIgnoreCase));
             bool scan = scanAll || args.Any(a => a.Equals("--scan", StringComparison.OrdinalIgnoreCase));
+            int ufi = Array.IndexOf(args, "--updated");
+            string updatedFrom = ufi >= 0 && args.Length > ufi + 1 ? args[ufi + 1] : null;
+            bool updateFailed = args.Contains("--update-failed");
+            bool resume = args.Contains("--resume");
             var form = new MainForm();
             App.UI = SynchronizationContext.Current;
 
@@ -88,7 +96,7 @@ namespace DPIKalkan
             waiter.Start();
 
             if (tray && !scan) { var h = form.Handle; } else form.Show();
-            form.BeginInvoke(new Action(() => form.AfterStartup(tray, scan, scanAll)));
+            form.BeginInvoke(new Action(() => form.AfterStartup(tray, scan, scanAll, updatedFrom, updateFailed, resume)));
             Application.Run(new ApplicationContext());
             GC.KeepAlive(mutex);
             return 0;
@@ -156,6 +164,73 @@ namespace DPIKalkan
             Check("proxy listesi ayrıştırma", ProxyTools.ParseList("# yorum\n1.1.1.1:80\n\nbozuk\nsocks5://2.2.2.2:1080\n1.1.1.1:80", ProxyKind.Http, out int bad).Count == 2 && bad == 1);
 
             // canlı proxy testleri (isteğe bağlı): doğrudan ve yerel köprü üzerinden
+            // güncelleme: GitHub yanıtının ayrıştırılması
+            string relJson = "{\"tag_name\":\"v9.8.7\",\"name\":\"DPI Kalkan 9.8.7\",\"draft\":false,\"prerelease\":false,\"body\":\"## Yenilikler\\n- a\",\"html_url\":\"https://github.com/x/y\"," +
+                             "\"published_at\":\"2026-11-20T10:00:00Z\",\"assets\":[{\"name\":\"DPI-Kalkan-9.8.7.zip.sha256\",\"browser_download_url\":\"https://github.com/a\",\"size\":80,\"digest\":null}," +
+                             "{\"name\":\"DPI-Kalkan-9.8.7.zip\",\"browser_download_url\":\"https://github.com/x/y/releases/download/v9.8.7/DPI-Kalkan-9.8.7.zip\",\"size\":564400," +
+                             "\"digest\":\"sha256:086556D50BFC1DD3D1B03DF0CADFDE01FA172343BBFAE6224D66A756CA93DB51\"}]}";
+            var ui1 = Updater.Parse(relJson);
+            Check("güncelleme: sürüm ve paket ayrıştırma", ui1 != null && ui1.Version == new Version(9, 8, 7) && ui1.AssetName == "DPI-Kalkan-9.8.7.zip" &&
+                  ui1.Sha256 == "086556d50bfc1dd3d1b03df0cadfde01fa172343bbfae6224d66a756ca93db51" && Updater.IsNewer(ui1), ui1?.Version + " " + ui1?.AssetName);
+            var ui2 = Updater.Parse(relJson.Replace("\"digest\":\"sha256:086556D50BFC1DD3D1B03DF0CADFDE01FA172343BBFAE6224D66A756CA93DB51\"", "\"digest\":null")
+                                           .Replace("- a", "**SHA-256** (DPI-Kalkan-9.8.7.zip): `" + new string('a', 64) + "`"));
+            Check("güncelleme: özet sürüm notundan okunur", ui2 != null && ui2.Sha256 == new string('a', 64));
+            Check("güncelleme: ön sürüm yok sayılır", Updater.Parse(relJson.Replace("\"prerelease\":false", "\"prerelease\":true")) == null);
+            Check("güncelleme: eski sürüm yeni sayılmaz", !Updater.IsNewer(Updater.Parse(relJson.Replace("9.8.7", "1.0.0"))));
+
+            // destek paketi: kişisel bilgi gizleme
+            string raw = @"C:\Users\ahmet\AppData\Local\Discord\Update.exe çıkış IP 203.0.113.45 TR · DNS 77.88.8.8:1253 · discord 162.159.135.232 · modem 192.168.1.1 · v6 2a00:1d34:abcd::5 fe80::1 · ali@example.com · 17:46:13";
+            string red = Support.Redact(raw);
+            Check("gizleme: kullanıcı klasörü", red.Contains(@"C:\Users\<kullanıcı>\AppData") && !red.Contains("ahmet"), red);
+            Check("gizleme: genel IP gizlenir, DNS/Discord kalır", red.Contains("<ip>") && !red.Contains("203.0.113") && red.Contains("77.88.8.8") && red.Contains("162.159.135.232"));
+            Check("gizleme: yerel IP, IPv6, e-posta", red.Contains("<yerel-ip>") && red.Contains("<ipv6>") && red.Contains("fe80::1") && red.Contains("<e-posta>") && red.Contains("17:46:13"));
+
+            // güncelleme kurulumu (dosya işlemleri; hizmete dokunmaz)
+            {
+                string t = Path.Combine(Path.GetTempPath(), "dpk-apply-test-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                string srcDir = Path.Combine(t, "yeni"), dstDir = Path.Combine(t, "kurulu");
+                Directory.CreateDirectory(Path.Combine(srcDir, "bin", "x86_64"));
+                Directory.CreateDirectory(Path.Combine(dstDir, "veri"));
+                Directory.CreateDirectory(Path.Combine(dstDir, "bin", "x86_64"));
+                File.WriteAllText(Path.Combine(srcDir, "DPIKalkan.exe"), "yeni");
+                File.WriteAllText(Path.Combine(srcDir, "bin", "x86_64", "goodbyedpi.exe"), "yeni-gdpi");
+                File.WriteAllText(Path.Combine(dstDir, "DPIKalkan.exe"), "eski");
+                File.WriteAllText(Path.Combine(dstDir, "bin", "x86_64", "goodbyedpi.exe"), "eski-gdpi");
+                File.WriteAllText(Path.Combine(dstDir, "veri", "ayarlar.xml"), "kullanıcı-ayarı");
+                int rc = Updater.Apply(srcDir, dstDir, 999999, "1.0.0", false, false);
+                bool okCopy = File.ReadAllText(Path.Combine(dstDir, "DPIKalkan.exe")) == "yeni" && File.ReadAllText(Path.Combine(dstDir, "bin", "x86_64", "goodbyedpi.exe")) == "yeni-gdpi";
+                bool okKeep = File.ReadAllText(Path.Combine(dstDir, "veri", "ayarlar.xml")) == "kullanıcı-ayarı";
+                bool okBak = File.ReadAllText(Path.Combine(dstDir, "veri", "onceki-surum", "DPIKalkan.exe")) == "eski";
+                Check("güncelleme kurulumu: kopyalama, ayarların korunması, yedek", rc == 0 && okCopy && okKeep && okBak, "rc=" + rc);
+                int rc2 = Updater.Apply(dstDir, dstDir, 999999, "1.0.0", false, false);
+                Check("güncelleme kurulumu: aynı klasör reddedilir", rc2 == 1);
+                try { Directory.Delete(t, true); } catch { }
+            }
+
+            if (proxies.Contains("--update-live"))
+            {
+                string err;
+                var li = Updater.Check(out err);
+                Check("GitHub'dan sürüm bilgisi", li != null && li.AssetUrl.Length > 0 && li.Sha256.Length == 64, li != null ? li.Tag + " " + li.AssetName + " sha " + li.Sha256.Substring(0, 12) : err);
+                if (li != null)
+                {
+                    try
+                    {
+                        string zip = Updater.Download(li, null, System.Threading.CancellationToken.None);
+                        string root = Updater.Extract(zip, li.Version);
+                        Check("GitHub'dan indirme + SHA-256 + açma", File.Exists(Path.Combine(root, "DPIKalkan.exe")), root);
+                        File.WriteAllText(Path.Combine(Path.GetTempPath(), "dpk-update-root.txt"), root);
+                    }
+                    catch (Exception ex) { Check("GitHub'dan indirme + SHA-256 + açma", false, ex.Message); }
+                    var badInfo = new UpdateInfo { Version = li.Version, AssetName = li.AssetName, AssetUrl = li.AssetUrl, Sha256 = new string('0', 64) };
+                    try { Updater.Download(badInfo, null, System.Threading.CancellationToken.None); Check("yanlış özet reddedilir", false); }
+                    catch (InvalidDataException) { Check("yanlış özet reddedilir", true); }
+                    var evil = new UpdateInfo { Version = li.Version, AssetName = "x.zip", AssetUrl = "https://example.com/x.zip", Sha256 = new string('0', 64) };
+                    try { Updater.Download(evil, null, System.Threading.CancellationToken.None); Check("GitHub dışı adres reddedilir", false); }
+                    catch (InvalidOperationException) { Check("GitHub dışı adres reddedilir", true); }
+                }
+            }
+
             if (proxies.Contains("--speed"))
             {
                 var sr = SpeedTest.Run(null, System.Threading.CancellationToken.None);
@@ -322,6 +397,22 @@ namespace DPIKalkan
                 form.Navigate(key);
                 Shot(form, Path.Combine(dir, "c_detayli_" + key + ".png"));
             }
+
+            // --- güncelleme bandı ve Ayarlar'ın alt bölümleri
+            Theme(form, "system", UiLevel.Orta);
+            Updater.DebugSetAvailable(new UpdateInfo { Version = new Version(2, 4, 0), Notes = "## Yenilikler\n- Örnek" });
+            App.RaiseStatus();
+            form.Navigate("home"); Shot(form, Path.Combine(dir, "f_home_update.png"));
+            var sp = form.Navigate("settings");
+            var area = sp.Controls.OfType<ScrollArea>().FirstOrDefault();
+            if (area != null)
+                foreach (int yy in new[] { 900, 1500 })
+                {
+                    area.AutoScrollPosition = new Point(0, DPIKalkan.Theme.D(yy));
+                    Shot(form, Path.Combine(dir, "f_settings_" + yy + ".png"));
+                }
+            Updater.DebugSetAvailable(null);
+            form.Go<TroublePage>("trouble"); Shot(form, Path.Combine(dir, "f_trouble.png"));
 
             // --- pencereler
             Theme(form, "system", UiLevel.Orta);

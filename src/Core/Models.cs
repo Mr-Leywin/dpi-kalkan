@@ -370,6 +370,9 @@ namespace DPIKalkan
         /// <summary>Bağlantı bekçisi aralığı (dakika, 0 = kapalı).</summary>
         public int WatchMinutes { get; set; } = 15;
         public bool Hotkey { get; set; }
+        public bool AutoUpdate { get; set; } = true;
+        public DateTime? LastUpdateCheck { get; set; }
+        public string SkipVersion { get; set; } = "";
         public List<ProxyEntry> Proxies { get; set; } = new List<ProxyEntry>();
         public List<ProxyApp> ProxyApps { get; set; } = new List<ProxyApp>();
         public ProxyBackup SystemProxyBackup { get; set; }
@@ -449,6 +452,19 @@ namespace DPIKalkan
             if (s == null) s = new AppSettings();
             s.Normalize();
             return s;
+        }
+
+        /// <summary>Ayarların bağımsız bir kopyası.</summary>
+        public static AppSettings Clone(AppSettings s)
+        {
+            using (var ms = new MemoryStream())
+            {
+                Ser.Serialize(ms, s);
+                ms.Position = 0;
+                var c = (AppSettings)Ser.Deserialize(ms);
+                c.Normalize();
+                return c;
+            }
         }
 
         /// <summary>Ayarları başka bir dosyaya yedekler (başka bilgisayara taşımak ya da paylaşmak için).</summary>

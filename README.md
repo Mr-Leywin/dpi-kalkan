@@ -1,5 +1,7 @@
 # DPI Kalkan
 
+[![Derleme](https://github.com/Mr-Leywin/dpi-kalkan/actions/workflows/build.yml/badge.svg)](https://github.com/Mr-Leywin/dpi-kalkan/actions/workflows/build.yml) [![Son sürüm](https://img.shields.io/github/v/release/Mr-Leywin/dpi-kalkan?label=s%C3%BCr%C3%BCm)](https://github.com/Mr-Leywin/dpi-kalkan/releases/latest) [![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-blue)](LICENSE)
+
 **GoodbyeDPI için kolay kullanımlı, Türkçe internet erişim kalkanı.** Servis sağlayıcıların DNS ve DPI (Derin Paket İnceleme) ile uyguladığı erişim engellerini (ör. Discord) tek tıkla aşar; çalışan yöntemi kendisi bulur, bozulunca kendisi onarır.
 
 > VPN değildir: trafiğiniz şifrelenmez, IP adresiniz değişmez. Yalnızca Windows 10/11.
@@ -15,6 +17,8 @@
 3. Windows "Bilgisayarınız korundu" derse **Ek bilgi → Yine de çalıştır** deyin. Uygulama henüz dijital olarak imzalı değildir.
 
 Ek kurulum gerekmez: .NET Framework 4.8, Windows 10/11'de zaten yüklüdür. Ayrıntılı Türkçe kullanım rehberi pakette `Rehber.html` olarak bulunur.
+
+**Güncelleme:** Uygulama yeni sürümleri kendisi denetler ve ana sayfada bildirir. "Güncelle" ile indirilen paket SHA-256 ile doğrulanır ve ayarlarınız korunarak kurulur.
 
 ## Özellikler
 
@@ -38,6 +42,7 @@ Ek kurulum gerekmez: .NET Framework 4.8, Windows 10/11'de zaten yüklüdür. Ayr
   - Yerel köprü sayesinde şifreli proxy'leri desteklemeyen programlar da şifreli proxy kullanabilir.
 - **Görünüm:** Windows renklerini izleyen "Sistem" teması ve 20 hazır tema. Her renk renk koduyla değiştirilebilir. Basit / Orta / Detaylı arayüz.
 - **Yedek betikler:** Uygulama olmadan çalışan `.cmd` dosyaları. Ayarları dışa ve içe aktarma.
+- **Otomatik güncelleme ve destek:** GitHub sürümlerinden doğrulamalı güncelleme. Kişisel bilgileri gizlenmiş destek paketi ve tek tıkla sorun bildirme.
 
 | | |
 |---|---|
@@ -75,6 +80,18 @@ Klasör yapısı:
 | `src/UI` | WinForms arayüzü: tema sistemi ve sayfalar |
 | `docs/Rehber.html` | Kullanım rehberi şablonu (hata kodları ve yöntemler derlemede eklenir) |
 | `third_party/goodbyedpi` | GoodbyeDPI 0.2.3rc3 resmi dosyaları (değiştirilmemiş, SHA-256 listeli) |
+
+## Sürüm yayımlama (geliştiriciler için)
+
+1. `src/Program.cs` içindeki `AssemblyVersion`/`AssemblyFileVersion` değerini artırın.
+2. `CHANGELOG.md` dosyasına yeni sürümün bölümünü ekleyin.
+3. Değişikliği gönderin ve etiketleyin: `git tag v2.3.1 && git push origin v2.3.1`.
+
+GitHub Actions paketi derler, testleri çalıştırır ve sürümü SHA-256 özetiyle yayımlar. Kullanıcıların uygulaması yeni sürümü kendisi bulur.
+
+## Sorun bildirme
+
+Uygulamada **Sorun Giderme → Sorun bildir** düğmesi bilgileri doldurulmuş bir sorun formu açar. **Destek paketi**, kişisel bilgileri gizlenmiş günlükleri tek dosyada toplar. Güvenlik açıkları için [SECURITY.md](SECURITY.md) dosyasına bakın. Değişiklikler: [CHANGELOG.md](CHANGELOG.md).
 
 ## Lisans
 
