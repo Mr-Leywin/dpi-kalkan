@@ -1,6 +1,13 @@
-# Her gönderimde derler ve birim testlerini çalıştırır.
-# "v" ile başlayan bir etiket gönderildiğinde (ör. v2.3.0) paketi GitHub sürümü olarak yayımlar;
-# uygulamanın otomatik güncelleme özelliği bu sürümleri kullanır.
+# Her gönderimde derler, iki kez derleyip çıktıların aynı olduğunu (tekrarlanabilirlik) ve birim testlerini denetler.
+# "v" ile başlayan bir etiket gönderildiğinde (ör. v2.4.0) taşınabilir zip, kurulum paketi ve SHA256SUMS.txt
+# GitHub sürümü olarak yayımlanır ve derleme kaynağı kanıtı (build provenance) eklenir; uygulamanın otomatik
+# güncellemesi bu sürümleri kullanır.
+#
+# Tüm eylemler tam commit SHA'sıyla sabitlenmiştir (yorumdaki sürüm yalnızca bilgi içindir). Araç sürümleri:
+# .NET SDK global.json'dan, Inno Setup aşağıdaki INNO_* değerlerinden (SHA-256 doğrulamalı), çalıştırıcı windows-2025.
+#
+# İmzalama kancası: depo ayarlarında DPK_SIGN_ARGS (ve gerekiyorsa DPK_SIGNTOOL) gizli değişkeni tanımlanırsa
+# build.ps1 exe'yi ve kurulum paketini imzalar; tanımlı değilse imzalama yapılmaz.
 name: Derleme
 
 on:
@@ -17,23 +24,50 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  INNO_VERSION: '6.7.3'
+  INNO_URL: 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe'
+  INNO_SHA256: '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732'
+
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 20
+    runs-on: windows-2025
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: Derle ve paketle
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Inno Setup (sabit sürüm, SHA-256 doğrulamalı)
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest $env:INNO_URL -OutFile $exe
+          $h = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($h -ne $env:INNO_SHA256) { throw "Inno Setup özeti uyuşmuyor: $h" }
+          $dir = Join-Path $env:RUNNER_TEMP 'inno'
+          $p = Start-Process $exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER',"/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or -not (Test-Path "$dir\ISCC.exe")) { throw 'Inno Setup kurulamadı' }
+          "ISCC=$dir\ISCC.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Derle, paketle ve tekrarlanabilirliği doğrula
         shell: powershell
-        run: ./build.ps1
+        env:
+          DPK_SIGN_ARGS: ${{ secrets.DPK_SIGN_ARGS }}
+          DPK_SIGNTOOL: ${{ secrets.DPK_SIGNTOOL }}
+        run: ./build.ps1 -VerifyReproducible
 
       - name: Birim testleri
         shell: powershell
         run: |
           Start-Process build\DPIKalkan.preview.exe -ArgumentList '--selftest', "$pwd\selftest.txt" -Wait -NoNewWindow
-          Get-Content selftest.txt -Encoding UTF8
           if (-not (Test-Path selftest.txt)) { throw 'Test çıktısı yok' }
+          Get-Content selftest.txt -Encoding UTF8
           if (Select-String -Path selftest.txt -Pattern '^FAIL' -Quiet) { throw 'Birim testi başarısız' }
 
       - name: Sürüm etiketi kodla uyumlu mu?
@@ -41,29 +75,55 @@ jobs:
         shell: powershell
         run: |
           $v = $env:GITHUB_REF_NAME.TrimStart('v')
-          if (-not (Test-Path "dist\DPI-Kalkan-$v.zip")) { throw "Etiket ($v) ile src\Program.cs içindeki sürüm uyuşmuyor." }
+          foreach ($f in "dist\DPI-Kalkan-$v.zip", "dist\DPI-Kalkan-$v-Setup.exe", "dist\DPI-Kalkan-$v.SHA256SUMS.txt") {
+            if (-not (Test-Path $f)) { throw "Etiket ($v) ile src\Program.cs içindeki sürüm uyuşmuyor ya da $f üretilmedi." }
+          }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: DPI-Kalkan
           path: |
-            dist/*.zip
-            dist/*.sha256
+            dist/DPI-Kalkan-*.zip
+            dist/DPI-Kalkan-*-Setup.exe
+            dist/DPI-Kalkan-*.SHA256SUMS.txt
           if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
-    runs-on: windows-latest
+    runs-on: windows-2025
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: DPI-Kalkan
           path: dist
+
+      - name: SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          Copy-Item "dist\DPI-Kalkan-$v.SHA256SUMS.txt" dist\SHA256SUMS.txt
+          # indirilen paketlerin özetleri derlemedeki listeyle aynı mı?
+          foreach ($f in "DPI-Kalkan-$v.zip", "DPI-Kalkan-$v-Setup.exe") {
+            $h = (Get-FileHash "dist\$f" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (-not (Select-String -Path dist\SHA256SUMS.txt -SimpleMatch "$h  $f" -Quiet)) { throw "$f özeti SHA256SUMS.txt ile uyuşmuyor" }
+          }
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/DPI-Kalkan-*.zip
+            dist/DPI-Kalkan-*-Setup.exe
+            dist/SHA256SUMS.txt
 
       - name: GitHub sürümünü yayımla
         shell: pwsh
@@ -72,12 +132,23 @@ jobs:
         run: |
           $v = $env:GITHUB_REF_NAME.TrimStart('v')
           $zip = "dist\DPI-Kalkan-$v.zip"
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          $setup = "dist\DPI-Kalkan-$v-Setup.exe"
+          $hz = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hs = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
           $cl = [IO.File]::ReadAllText("$pwd\CHANGELOG.md", [Text.Encoding]::UTF8)
           $m = [regex]::Match($cl, "(?ms)^## \[?$([regex]::Escape($v))\]?[^\n]*\n(.*?)(?=^## |\z)")
           $body = if ($m.Success) { $m.Groups[1].Value.Trim() } else { "DPI Kalkan $v" }
-          $notes = "$body`n`n### Kurulum`n1. Aşağıdan **DPI-Kalkan-$v.zip** dosyasını indirin, sağ tıklayıp **Tümünü ayıkla** deyin.`n2. **DPIKalkan.exe**'yi çalıştırıp yönetici iznini onaylayın. Windows uyarı verirse **Ek bilgi → Yine de çalıştır**.`n3. Önceki bir sürüm kuruluysa uygulama kendini otomatik günceller (Ayarlar → Güncellemeler).`n`n**SHA-256** (DPI-Kalkan-$v.zip): ``$hash``"
+          # 2.3.0 güncelleyicisi GitHub özeti yoksa notlardaki ilk SHA-256 satırını zip özeti sayar: zip satırı önce yazılır
+
+          $notes = "$body`n`n### Kurulum`n" +
+                   "- **Önerilen:** **DPI-Kalkan-$v-Setup.exe** dosyasını indirip çalıştırın; Program Files'a kurulur, arka plan hizmeti ve Windows açılışında başlatma kullanılabilir. Windows uyarı verirse **Ek bilgi → Yine de çalıştır**.`n" +
+                   "- **Taşınabilir:** **DPI-Kalkan-$v.zip** dosyasını bir klasöre çıkarıp **DPIKalkan.exe**'yi çalıştırın (uygulama modu).`n" +
+                   "- Önceki bir sürüm kuruluysa uygulama kendini otomatik günceller (Ayarlar → Güncellemeler).`n`n" +
+                   "### Doğrulama`n" +
+                   "**SHA-256** (DPI-Kalkan-$v.zip): ``$hz```n`n" +
+                   "**SHA-256** (DPI-Kalkan-$v-Setup.exe): ``$hs```n`n" +
+                   "Tüm dosyaların özetleri **SHA256SUMS.txt** içindedir. Derleme kaynağı kanıtı: ``gh attestation verify <dosya> -R $env:GITHUB_REPOSITORY``"
           [IO.File]::WriteAllText("$pwd\notes.md", $notes, (New-Object Text.UTF8Encoding $false))
           gh release view $env:GITHUB_REF_NAME 2>$null
           if ($LASTEXITCODE -eq 0) { Write-Host 'Bu sürüm zaten yayımlanmış; yeniden yayımlanmadı.'; exit 0 }
-          gh release create $env:GITHUB_REF_NAME $zip "$zip.sha256" --title "DPI Kalkan $v" --notes-file notes.md --latest
+          gh release create $env:GITHUB_REF_NAME $setup $zip dist\SHA256SUMS.txt --title "DPI Kalkan $v" --notes-file notes.md --latest

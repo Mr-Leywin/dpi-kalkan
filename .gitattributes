@@ -3,7 +3,14 @@
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 *.manifest text eol=crlf
+*.iss text eol=crlf
 *.txt text eol=crlf
+# paket içindeki okubeni LF kalır (yerel ve CI paketleri aynı olsun)
+OKUBENI.txt text eol=lf
+# pakete giren metin dosyalarının satır sonları sabit (yerel ve CI paketleri aynı içerikte olsun)
+LICENSE text eol=crlf
+THIRD_PARTY_NOTICES.md text eol=crlf
+docs/Rehber.html text eol=crlf
 *.exe binary
 *.dll binary
 *.sys binary

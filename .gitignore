@@ -3,6 +3,11 @@ build/
 dist/
 *.rsp
 
+# test ve yayın sırasında üretilen geçici dosyalar
+sonuc.txt
+selftest.txt
+notes.md
+
 # uygulamanın çalışırken oluşturduğu ayar/günlük klasörü
 veri/
 
