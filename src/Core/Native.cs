@@ -5,6 +5,23 @@ namespace DPIKalkan
 {
     static class Native
     {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetDefaultDllDirectories(uint directoryFlags);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool SetDllDirectory(string path);
+
+        /// <summary>
+        /// DLL arama sırasını kısıtlar: geçerli çalışma klasörü ve PATH klasörleri aranmaz, yalnızca uygulama klasörü
+        /// (kurulumlu sürümde yönetici korumalı) ve System32 aranır. Main'in ilk satırında çağrılır.
+        /// </summary>
+        public static void HardenDllSearch()
+        {
+            const uint LOAD_LIBRARY_SEARCH_APPLICATION_DIR = 0x200, LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x800;
+            try { if (SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)) return; } catch { }
+            try { SetDllDirectory(""); } catch { }   // eski sistemler: en azından geçerli klasörü çıkar
+        }
+
         [DllImport("dnsapi.dll", EntryPoint = "DnsFlushResolverCache")]
         static extern bool DnsFlushResolverCacheNative();
 
@@ -91,7 +108,7 @@ namespace DPIKalkan
         [DllImport("kernel32.dll")]
         static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION info, uint size);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
 
         static IntPtr _job;
@@ -107,9 +124,11 @@ namespace DPIKalkan
                     info.BasicLimitInformation.LimitFlags = 0x2000; // KILL_ON_JOB_CLOSE
                     SetInformationJobObject(_job, 9, ref info, (uint)Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)));
                 }
-                AssignProcessToJobObject(_job, processHandle);
+                // KILL_ON_JOB_CLOSE: uygulama çökse ya da zorla kapatılsa bile GoodbyeDPI onunla birlikte kapanır, filtre takılı kalmaz
+                if (_job == IntPtr.Zero || !AssignProcessToJobObject(_job, processHandle))
+                    App.Log("GoodbyeDPI uygulamaya bağlanamadı (Win32 hata " + Marshal.GetLastWin32Error() + "); uygulama çökerse açık kalabilir.", LogLevel.Warn);
             }
-            catch { }
+            catch (Exception ign) { App.Log("GoodbyeDPI uygulamaya bağlanamadı (uygulama çökerse açık kalabilir): " + ign.Message, LogLevel.Warn); }
         }
     }
 }

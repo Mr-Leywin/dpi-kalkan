@@ -104,6 +104,14 @@ namespace DPIKalkan
             lock (gate)
             {
                 bool asService = App.Settings.ServiceMode && !forceApp;
+                if (asService && !InstallGuard.IsProtected)
+                {
+                    // SYSTEM hizmeti yalnızca korumalı (kurulumlu) klasörden çalıştırılır
+                    App.Log("[DK-705] Taşınabilir sürümde arka plan hizmeti kullanılamaz; uygulama modunda başlatılıyor.", LogLevel.Warn);
+                    App.Settings.ServiceMode = false;
+                    App.Post(App.Save);
+                    asService = false;
+                }
                 ActiveProfile = p;
                 SetState(EngineState.Starting);
                 userStop = true;
@@ -114,8 +122,14 @@ namespace DPIKalkan
                 string missing = MissingFile();
                 if (missing != null)
                 {
-                    Fail(missing + " bulunamadı (" + BinDir + "). Antivirüs programı dosyayı karantinaya almış olabilir; " +
-                         "uygulama klasörünü antivirüs istisnalarına ekleyip paketi yeniden çıkarın.", "DK-102");
+                    Fail(missing + " bulunamadı (" + BinDir + "). Antivirüs dosyayı karantinaya almış olabilir: karantinadan geri yükleyin ve " +
+                         "dosyayı Microsoft'a yanlış pozitif olarak bildirin (DK-102); istisna eklemeyi yalnızca son çare olarak kullanın.", "DK-102");
+                    return false;
+                }
+
+                if (!ArgPolicy.ValidateProfile(p, out string argErr))
+                {
+                    Fail("'" + p.Name + "' profili güvenli olmayan ya da tanınmayan bir parametre içeriyor: " + argErr, "DK-605");
                     return false;
                 }
 
@@ -132,7 +146,18 @@ namespace DPIKalkan
                 App.Log("Başlatılıyor: " + p.Name + (asService ? " (arka plan hizmeti)" : ""), LogLevel.Info);
                 App.Log("Komut: goodbyedpi.exe " + args, LogLevel.Debug);
 
-                bool ok = asService ? StartService(args) : StartProcess(args);
+                bool ok;
+                // dosyalar doğrulanır ve başlatma bitene kadar yazmaya kapalı tutulur
+                using (var hold = Integrity.VerifyAndLock(BinDir, Arch, RequiredFiles, out string intErr))
+                {
+                    if (hold == null)
+                    {
+                        Fail("GoodbyeDPI dosyaları doğrulanamadı: " + intErr + " Dosya bozulmuş ya da değiştirilmiş olabilir; " +
+                             "DPI Kalkan'ı resmi sürüm sayfasından yeniden indirin.", "DK-105");
+                        return false;
+                    }
+                    ok = asService ? StartService(args) : StartProcess(args);
+                }
                 if (!ok) return false;
 
                 userStop = false;
@@ -183,7 +208,7 @@ namespace DPIKalkan
                 if (LooksLikeError(consoleText))
                 {
                     proc = null;
-                    try { p.Kill(); p.WaitForExit(2000); } catch { }
+                    try { p.Kill(); p.WaitForExit(2000); } catch (Exception ign) { App.Ignored("GoodbyeDPI kapatılamadı", ign); }
                     Fail("GoodbyeDPI başlatılamadı. " + Explain(consoleText), Diagnose(consoleText).Code);
                     return false;
                 }
@@ -241,7 +266,7 @@ namespace DPIKalkan
                     foreach (ManagementObject mo in q.Get())
                         using (mo) return mo["PathName"] as string;
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Hizmet yolu okunamadı", ign); }
             return null;
         }
 
@@ -262,11 +287,11 @@ namespace DPIKalkan
         {
             string t = output ?? "";
             if (t.Contains("were not found"))
-                return ("DK-202", "WinDivert sürücü dosyaları bulunamadı. Antivirüs dosyaları silmiş olabilir; klasörü istisnaya ekleyip paketi yeniden çıkarın.");
+                return ("DK-202", "WinDivert sürücü dosyaları bulunamadı. Antivirüs dosyaları silmiş olabilir; karantinadan geri yükleyip yanlış pozitif olarak bildirin ya da paketi yeniden çıkarın.");
             if (t.Contains("incompatible version"))
                 return ("DK-206", "Farklı sürümde bir WinDivert sürücüsü yüklü. 'Tümünü sıfırla' yapıp bilgisayarı yeniden başlatın.");
             if (t.Contains("blocked by security software"))
-                return ("DK-204", "WinDivert sürücüsü antivirüs programı tarafından engellendi. Uygulama klasörünü antivirüs istisnalarına ekleyin.");
+                return ("DK-204", "WinDivert sürücüsü antivirüs programı tarafından engellendi. Dosyaların resmi olduğunu Tam kontrolle doğrulayıp yanlış pozitif olarak bildirin; istisna yalnızca son çare.");
             if (t.Contains("Base Filtering Engine"))
                 return ("DK-205", "'Temel Filtreleme Altyapısı' (BFE) Windows hizmeti kapalı.");
             if (t.Contains("digital signature"))
@@ -345,7 +370,7 @@ namespace DPIKalkan
             {
                 var p = proc;
                 proc = null;
-                try { if (!p.HasExited) { p.Kill(); p.WaitForExit(3000); } } catch { }
+                try { if (!p.HasExited) { p.Kill(); p.WaitForExit(3000); } } catch (Exception ign) { App.Ignored("GoodbyeDPI kapatılamadı", ign); }
             }
             try
             {
@@ -430,6 +455,11 @@ namespace DPIKalkan
 
         bool StartService(string args)
         {
+            if (!InstallGuard.IsProtected)
+            {
+                Fail("Arka plan hizmeti yalnızca kurulumlu sürümde kullanılabilir (" + InstallGuard.Reason + ")", "DK-705");
+                return false;
+            }
             string bin = "\"" + ExePath + "\" " + args;
             bool exists = ServiceExists(ServiceName);
             if (!exists)
@@ -584,7 +614,7 @@ namespace DPIKalkan
                     App.RaiseStatus();
                 }
             }
-            catch (Exception ex) { Debug.WriteLine(ex); }
+            catch (Exception ex) { App.Ignored("Durum denetimi", ex); }
             finally { Interlocked.Exchange(ref polling, 0); }
         }
 
@@ -598,7 +628,7 @@ namespace DPIKalkan
                     using (s)
                         if (s.ServiceName.Equals(name, StringComparison.OrdinalIgnoreCase)) return true;
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Hizmet listesi okunamadı", ign); }
             return false;
         }
 
@@ -610,41 +640,65 @@ namespace DPIKalkan
                     foreach (ManagementObject mo in q.Get())
                         using (mo) return Convert.ToInt32(mo["ProcessId"]);
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Hizmet işlem numarası okunamadı", ign); }
             return -1;
         }
 
-        static Encoding Oem
+        public static (int Code, string Output) Sc(string args) => Sys.Run(Sys.SystemExe("sc.exe"), args, 30000);
+
+        /// <summary>Hizmetin komut satırındaki exe yolu (tırnaklı ya da tırnaksız).</summary>
+        public static string ServiceExe(string name)
         {
-            get
-            {
-                try { return Encoding.GetEncoding(CultureInfo.CurrentCulture.TextInfo.OEMCodePage); }
-                catch { return Encoding.Default; }
-            }
+            string cmd = ServicePath(name);
+            if (string.IsNullOrWhiteSpace(cmd)) return null;
+            cmd = cmd.Trim();
+            if (cmd.StartsWith("\"")) { int e = cmd.IndexOf('"', 1); return e > 1 ? cmd.Substring(1, e - 1) : null; }
+            int x = cmd.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            return x > 0 ? cmd.Substring(0, x + 4) : cmd;
         }
 
-        public static (int Code, string Output) Sc(string args)
+        /// <summary>
+        /// Kaldırma için: yalnızca DPI Kalkan'a ait olanları temizler (kendi hizmeti, bu klasördeki goodbyedpi işlemleri,
+        /// WinDivert sürücü kaydı). Başka programların GoodbyeDPI hizmetine dokunmaz.
+        /// </summary>
+        public void RemoveForUninstall(StringBuilder report)
         {
-            try
+            lock (gate)
             {
-                var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "sc.exe"), args)
+                userStop = true;
+                StopInternal();
+                string own = BinDir.TrimEnd('\\') + "\\";
+                foreach (var p in Process.GetProcessesByName("goodbyedpi"))
+                    using (p)
+                    {
+                        try
+                        {
+                            if (p.MainModule.FileName.StartsWith(own, StringComparison.OrdinalIgnoreCase)) { p.Kill(); p.WaitForExit(3000); }
+                        }
+                        catch (Exception ign) { App.Ignored("goodbyedpi kapatılamadı", ign); }
+                    }
+                if (ServiceExists(ServiceName))
                 {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    StandardOutputEncoding = Oem,
-                    StandardErrorEncoding = Oem,
-                };
-                using (var p = Process.Start(psi))
-                {
-                    string o = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-                    p.WaitForExit(15000);
-                    App.Log("sc " + args + " → " + p.ExitCode, LogLevel.Debug);
-                    return (p.ExitCode, o.Trim());
+                    Sc("stop " + ServiceName);
+                    var r = Sc("delete " + ServiceName);
+                    report.AppendLine(r.Code == 0 ? "• Arka plan hizmeti (DPIKalkan) kaldırıldı." : "• Arka plan hizmeti kaldırılamadı: " + r.Output);
                 }
+                var others = Process.GetProcessesByName("goodbyedpi");
+                bool otherDpi = others.Length > 0;
+                foreach (var o in others) o.Dispose();
+                foreach (var n in new[] { "WinDivert", "WinDivert14" })
+                {
+                    if (!ServiceExists(n)) continue;
+                    if (otherDpi) { report.AppendLine("• " + n + " sürücü kaydı başka bir GoodbyeDPI çalıştığı için bırakıldı."); continue; }
+                    Sc("stop " + n);
+                    var r = Sc("delete " + n);
+                    if (r.Code == 0) report.AppendLine("• " + n + " sürücü kaydı kaldırıldı.");
+                }
+                StartedAt = null;
+                ServiceInstalled = false;
+                RunningAsService = false;
+                SetState(EngineState.Stopped);
             }
-            catch (Exception ex) { return (-1, ex.Message); }
         }
 
         /// <summary>CommandLineToArgvW kurallarına göre tek bir argüman olarak tırnaklar.</summary>

@@ -534,7 +534,7 @@ namespace DPIKalkan
                         return Math.Abs((DateTime.UtcNow - server).TotalMinutes);
                 }
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Sunucu saati okunamadı", ign); }
             return null;
         }
 
@@ -606,7 +606,7 @@ namespace DPIKalkan
                     list.Add(a);
                 }
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Ağ bağdaştırıcıları okunamadı", ign); }
             return list;
         }
 

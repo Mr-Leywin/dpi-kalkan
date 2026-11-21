@@ -1,47 +1,97 @@
 using System;
-using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
-using System.Text;
 using System.Windows.Forms;
+using System.Xml;
 
 namespace DPIKalkan
 {
     /// <summary>
     /// "Windows ile başlat": Görev Zamanlayıcı ile oturum açılışında en yüksek yetkiyle başlatır
-    /// (her açılışta UAC sorusu çıkmaz). Pil ile çalışırken de başlar.
+    /// (her açılışta UAC sorusu çıkmaz). Görev, geçici dosya kullanılmadan doğrudan Görev Zamanlayıcı'nın
+    /// COM arabirimiyle (Schedule.Service) kaydedilir. Yalnızca korumalı (kurulumlu) klasörde izin verilir.
     /// </summary>
     static class Startup
     {
         const string TaskName = "DPI Kalkan";
+        const int TASK_CREATE_OR_UPDATE = 6, TASK_LOGON_INTERACTIVE_TOKEN = 3;
 
-        static (int Code, string Output) Schtasks(string args)
+        static object Call(object o, string method, params object[] args) =>
+            o.GetType().InvokeMember(method, BindingFlags.InvokeMethod, null, o, args);
+
+        static object Prop(object o, string name) =>
+            o.GetType().InvokeMember(name, BindingFlags.GetProperty, null, o, null);
+
+        static void Release(object o)
+        {
+            try { if (o != null && Marshal.IsComObject(o)) Marshal.FinalReleaseComObject(o); } catch { }
+        }
+
+        /// <summary>Görev Zamanlayıcı kök klasörüyle bir işlem yapar.</summary>
+        static T WithRoot<T>(Func<object, T> f)
+        {
+            object svc = null, root = null;
+            try
+            {
+                svc = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service", true));
+                Call(svc, "Connect");
+                root = Call(svc, "GetFolder", "\\");
+                return f(root);
+            }
+            finally { Release(root); Release(svc); }
+        }
+
+        static string Unwrap(Exception ex) => (ex as TargetInvocationException)?.InnerException?.Message ?? ex.Message;
+
+        /// <summary>Görevin XML tanımı (yoksa null).</summary>
+        static string TaskXml()
         {
             try
             {
-                var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe"), args)
+                return WithRoot(root =>
                 {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                };
-                using (var p = Process.Start(psi))
-                {
-                    string o = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-                    p.WaitForExit(15000);
-                    return (p.ExitCode, o.Trim());
-                }
+                    object task = null;
+                    try { task = Call(root, "GetTask", TaskName); return Prop(task, "Xml") as string; }
+                    catch { return null; }
+                    finally { Release(task); }
+                });
             }
-            catch (Exception ex) { return (-1, ex.Message); }
+            catch { return null; }
         }
 
-        public static bool IsEnabled() => Schtasks("/Query /TN \"" + TaskName + "\"").Code == 0;
+        public static bool IsEnabled() => TaskXml() != null;
+
+        /// <summary>Görev Zamanlayıcı'ya COM ile bağlanılabiliyor mu (test için).</summary>
+        internal static bool Probe(out string error)
+        {
+            error = "";
+            try { return WithRoot(root => Prop(root, "Path") as string == "\\"); }
+            catch (Exception ex) { error = Unwrap(ex); return false; }
+        }
+
+        /// <summary>Görevin çalıştırdığı exe yolu (görev yoksa null).</summary>
+        public static string CommandPath()
+        {
+            string xml = TaskXml();
+            if (xml == null) return null;
+            try
+            {
+                var doc = new XmlDocument { XmlResolver = null };
+                doc.LoadXml(xml);
+                var ns = new XmlNamespaceManager(doc.NameTable);
+                ns.AddNamespace("t", "http://schemas.microsoft.com/windows/2004/02/mit/task");
+                return doc.SelectSingleNode("//t:Exec/t:Command", ns)?.InnerText.Trim().Trim('"');
+            }
+            catch { return null; }
+        }
 
         public static bool Enable(out string error)
         {
             error = null;
+            if (!InstallGuard.IsProtected) { error = InstallGuard.NeedInstall; return false; }
             string user;
             using (var id = WindowsIdentity.GetCurrent()) user = id.Name;
             string exe = Application.ExecutablePath;
@@ -86,29 +136,39 @@ $@"<?xml version=""1.0"" encoding=""UTF-16""?>
   </Settings>
   <Actions Context=""Author"">
     <Exec>
-      <Command>{SecurityElement.Escape(exe)}</Command>
+      <Command>{SecurityElement.Escape("\"" + exe + "\"")}</Command>
       <Arguments>--tray</Arguments>
       <WorkingDirectory>{SecurityElement.Escape(Path.GetDirectoryName(exe))}</WorkingDirectory>
     </Exec>
   </Actions>
 </Task>";
-            string tmp = Path.Combine(Path.GetTempPath(), "dpikalkan_task.xml");
             try
             {
-                File.WriteAllText(tmp, xml, Encoding.Unicode);
-                var r = Schtasks("/Create /TN \"" + TaskName + "\" /XML \"" + tmp + "\" /F");
-                if (r.Code != 0) { error = r.Output; return false; }
+                WithRoot(root =>
+                {
+                    object task = null;
+                    try { task = Call(root, "RegisterTask", TaskName, xml, TASK_CREATE_OR_UPDATE, null, null, TASK_LOGON_INTERACTIVE_TOKEN, null); }
+                    finally { Release(task); }
+                    return true;
+                });
                 App.Log("Windows açılışında başlatma etkinleştirildi.", LogLevel.Success);
                 return true;
             }
-            catch (Exception ex) { error = ex.Message; return false; }
-            finally { try { File.Delete(tmp); } catch { } }
+            catch (Exception ex) { error = Unwrap(ex); return false; }
         }
 
         public static void Disable()
         {
-            var r = Schtasks("/Delete /TN \"" + TaskName + "\" /F");
-            if (r.Code == 0) App.Log("Windows açılışında başlatma kapatıldı.", LogLevel.Info);
+            try
+            {
+                bool removed = WithRoot(root =>
+                {
+                    try { Call(root, "DeleteTask", TaskName, 0); return true; }
+                    catch { return false; }   // görev yok
+                });
+                if (removed) App.Log("Windows açılışında başlatma kapatıldı.", LogLevel.Info);
+            }
+            catch (Exception ex) { App.Log("Açılış görevi kaldırılamadı: " + Unwrap(ex), LogLevel.Warn); }
         }
     }
 }

@@ -194,12 +194,30 @@ namespace DPIKalkan
                     catch { return "İzin verilmedi."; }
                     return null;
                 case FixKind.OpenAppFolder: Sys.OpenFolder(App.BaseDir); return "Klasör açıldı: " + App.BaseDir;
+                case FixKind.ReportFalsePositive:
+                    Sys.OpenAsUser(App.WdsiUrl);
+                    return "Microsoft'un dosya gönderme sayfası açıldı. 'Software developer' değil 'Home customer' seçip karantinadaki dosyayı " +
+                           "'Incorrectly detected as malware' olarak gönderin. Dosyanın resmi olduğunu Sorun Giderme → Tam kontrol (Dosya bütünlüğü) gösterir.";
                 case FixKind.ResetAll:
                     if (MessageBox.Show(owner, "Koruma durdurulacak; GoodbyeDPI/DPI Kalkan hizmetleri ve WinDivert sürücü kaydı kaldırılacak.\n\nDevam edilsin mi?",
                             App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return null;
                     await Task.Run(() => App.Engine.ResetAll());
                     App.Settings.ServiceMode = false;
                     App.Save();
+                    {
+                        bool proxySet = App.Settings.SystemProxyBackup != null, dnsSet = App.Settings.DnsBackups.Count > 0 || App.Settings.DohBackups.Count > 0;
+                        if ((proxySet || dnsSet) && MessageBox.Show(owner,
+                                "DPI Kalkan'ın değiştirdiği " + (proxySet && dnsSet ? "Windows proxy ve DNS ayarları" : proxySet ? "Windows proxy ayarı" : "DNS sunucuları") +
+                                " de eski hâline döndürülsün mü?", App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                        {
+                            await Task.Run(() =>
+                            {
+                                if (proxySet) ProxyTools.RestoreSystem();
+                                if (dnsSet) SystemDns.Restore(out _, onlyBackups: true);
+                            });
+                            return "Sıfırlama tamamlandı; proxy/DNS ayarları da geri alındı. Sorun sürerse bilgisayarı yeniden başlatın.";
+                        }
+                    }
                     return "Sıfırlama tamamlandı. Sorun sürerse bilgisayarı yeniden başlatın.";
                 case FixKind.ResolveConflicts:
                     await Task.Run(() => App.Engine.ResolveConflicts());

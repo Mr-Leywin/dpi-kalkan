@@ -99,7 +99,7 @@ namespace DPIKalkan
                 if (Directory.Exists(dir) && Directory.GetDirectories(dir).Any(d => File.Exists(Path.Combine(d, "resources.pak"))))
                     return AppProxyMode.Chromium;
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Program türü algılanamadı", ign); }
             return AppProxyMode.Env;
         }
 
@@ -124,6 +124,8 @@ namespace DPIKalkan
             string url = ProxyUrl(a, p);
             string extra = string.IsNullOrWhiteSpace(a.ExtraArgs) ? "" : " " + a.ExtraArgs.Trim();
             string exe = a.ExePath;
+            if (CmdLine.HasControlChars(extra) || CmdLine.HasControlChars(exe) || CmdLine.HasControlChars(url))
+                throw new ArgumentException("Program kuralı ya da proxy adresi geçersiz (kontrol karakteri) içeriyor.");
             string wd = Path.GetDirectoryName(exe);
             switch (a.Mode)
             {
@@ -161,7 +163,12 @@ namespace DPIKalkan
                     }
                 default:
                     {
-                        // ortam değişkenleriyle başlat (cmd simge durumunda açılıp hemen kapanır)
+                        // ortam değişkenleriyle başlat (cmd simge durumunda açılıp hemen kapanır).
+                        // cmd komut satırına giren her değer denetlenir: tırnak içindekiler (yol, adres) tırnak/yüzde/ünlem,
+                        // tırnaksız ek parametreler & | < > ^ % ! içeremez; aksi hâlde komut eklenebilirdi.
+                        if (!CmdLine.QuotedSafe(exe)) throw new ArgumentException("Program yolu ortam değişkeni modunda kullanılamayan bir karakter (\" % !) içeriyor.");
+                        if (!CmdLine.QuotedSafe(url)) throw new ArgumentException("Proxy adresi ortam değişkeni modunda kullanılamayan bir karakter içeriyor.");
+                        if (!CmdLine.BareSafe(extra)) throw new ArgumentException("Ek parametrelerde & | < > ^ % ! karakterleri kullanılamaz.");
                         string cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
                         var sb = new StringBuilder("/c ");
                         foreach (var v in new[] { "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy" })
@@ -251,7 +258,7 @@ namespace DPIKalkan
                 if (a.CloseRunning && !browserProfile && a.Mode != AppProxyMode.Firefox)
                 {
                     var procs = RunningOf(a).ToList();
-                    foreach (var pr in procs) using (pr) { try { pr.Kill(); } catch { } }
+                    foreach (var pr in procs) using (pr) { try { pr.Kill(); } catch (Exception ign) { App.Ignored("Program kapatılamadı", ign); } }
                     if (procs.Count > 0) Thread.Sleep(1200);
                 }
                 string lnk = Path.Combine(Path.GetTempPath(), "DPIKalkan-" + Scripts.Slug(a.Name) + "-proxy.lnk");

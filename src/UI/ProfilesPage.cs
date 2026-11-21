@@ -565,8 +565,8 @@ namespace DPIKalkan
                 if (tmp.CustomDns4.Length == 0 && tmp.CustomDns6.Length == 0) { Warn("Özel DNS için en az bir adres girin."); return; }
             }
             if (tmp.BuildArgs(null).Trim().Length == 0) { Warn("Profil hiçbir yöntem içermiyor. En azından bir temel mod ya da DNS seçin."); return; }
-            if ((tmp.UseRaw ? tmp.RawArgs : tmp.ExtraArgs).Contains("--blacklist"))
-            { Warn("--blacklist parametresini elle eklemeyin; 'Hedef Siteler' sayfasındaki hedefli modu kullanın."); return; }
+            if (!ArgPolicy.ValidateProfile(tmp, out string argErr))
+            { Warn("Parametreler kabul edilmedi: " + argErr); return; }
             if (!tmp.UsesDnsRedirect &&
                 MessageBox.Show(this, "Bu profilde DNS yönlendirmesi yok. Türkiye'de Discord DNS ile de engelli olduğu için bu profille Discord açılmayabilir.\n\nYine de kaydedilsin mi?",
                     App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;

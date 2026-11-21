@@ -69,7 +69,7 @@ namespace DPIKalkan
         {
             var c = choices.SelectedItem as SystemDnsChoice;
             chkDoh.Visible = c != null && !c.IsAuto;
-            bRestore.Enabled = App.Settings.DnsBackups.Count > 0;
+            bRestore.Enabled = App.Settings.DnsBackups.Count > 0 || App.Settings.DohBackups.Count > 0;
         }
 
         void DrawChoice(object sender, DrawItemEventArgs e)

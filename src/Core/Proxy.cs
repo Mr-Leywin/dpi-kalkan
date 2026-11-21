@@ -285,7 +285,7 @@ namespace DPIKalkan
                     }
                 }
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Proxy çıkış bilgisi okunamadı", ign); }
             finally { try { client?.Close(); } catch { } }
         }
 
@@ -374,7 +374,7 @@ namespace DPIKalkan
                 InternetSetOption(IntPtr.Zero, 39, IntPtr.Zero, 0);   // INTERNET_OPTION_SETTINGS_CHANGED
                 InternetSetOption(IntPtr.Zero, 37, IntPtr.Zero, 0);   // INTERNET_OPTION_REFRESH
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Windows proxy değişikliği bildirilemedi", ign); }
         }
 
         public static (bool Enabled, string Server) CurrentSystem() => NetTest.SystemProxy();
@@ -477,7 +477,7 @@ namespace DPIKalkan
             {
                 string lnk = Path.Combine(Path.GetTempPath(), "DPIKalkan-Discord-Proxy.lnk");
                 CreateShortcut(p, lnk);
-                foreach (var d in DiscordHelper.Processes()) using (d) { try { d.Kill(); } catch { } }
+                foreach (var d in DiscordHelper.Processes()) using (d) { try { d.Kill(); } catch (Exception ign) { App.Ignored("Discord kapatılamadı", ign); } }
                 foreach (var d in DiscordHelper.Processes()) using (d) { try { d.WaitForExit(4000); } catch { } }
                 Thread.Sleep(800);
                 bool ok = Sys.OpenAsUser(lnk);

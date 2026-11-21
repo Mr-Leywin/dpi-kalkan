@@ -22,7 +22,13 @@ namespace DPIKalkan
     public static class App
     {
         public const string Name = "DPI Kalkan";
+        /// <summary>Yayıncı (exe ve kurulum paketi sürüm bilgisi, Hakkında sayfası). GitHub kullanıcı adı ayrıdır (RepoUrl).</summary>
+        public const string Publisher = "Osman Barış MEDİNE (Mr Leywin)";
+        /// <summary>MIT lisansındaki telif satırı (LICENSE ile aynı).</summary>
+        public const string Copyright = "Copyright (c) 2026 " + Publisher;
         public const string RepoUrl = "https://github.com/Mr-Leywin/dpi-kalkan";
+        /// <summary>Microsoft'a yanlış pozitif (hatalı virüs uyarısı) bildirme sayfası.</summary>
+        public const string WdsiUrl = "https://www.microsoft.com/en-us/wdsi/filesubmission";
         public static readonly string Version = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
 
         public static string BaseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -67,7 +73,7 @@ namespace DPIKalkan
 
         public static void Init()
         {
-            try { Directory.CreateDirectory(DataDir); } catch { }
+            try { Directory.CreateDirectory(DataDir); } catch (Exception ign) { App.Ignored("Veri klasörü oluşturulamadı", ign); }
             try
             {
                 var fi = new FileInfo(LogFile);
@@ -78,7 +84,7 @@ namespace DPIKalkan
                     File.Move(LogFile, old);
                 }
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Günlük dosyası döndürülemedi", ign); }
             Settings = SettingsStore.Load();
             History.Load();
             Engine = new Engine();
@@ -117,11 +123,20 @@ namespace DPIKalkan
         public static LogEntry[] LogSnapshot() { lock (LogLock) return LogBuffer.ToArray(); }
         public static void ClearLog() { lock (LogLock) LogBuffer.Clear(); }
 
+        /// <summary>
+        /// Akışı durdurmayan ama sessizce kaybolmaması gereken hataları ayrıntı (Debug) düzeyinde günlüğe yazar
+        /// (boş catch blokları yerine). Detaylı arayüzdeki günlükte ve destek paketinde görünür.
+        /// </summary>
+        public static void Ignored(string where, Exception ex)
+        {
+            try { Log(where + ": " + (ex == null ? "?" : ex.GetType().Name + " – " + ex.Message), LogLevel.Debug); } catch { }
+        }
+
         public static void Post(Action a)
         {
             var ui = UI;
-            if (ui == null) { try { a(); } catch { } return; }
-            ui.Post(_ => { try { a(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine(ex); } }, null);
+            if (ui == null) { try { a(); } catch (Exception ign) { App.Ignored("Arka plan işlemi", ign); } return; }
+            ui.Post(_ => { try { a(); } catch (Exception ex) { Ignored("Arayüz işlemi", ex); } }, null);
         }
 
         public static void RaiseStatus() => Post(() => StatusChanged?.Invoke());

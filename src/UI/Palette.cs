@@ -145,7 +145,7 @@ namespace DPIKalkan
                     }
                 }
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Sistem rengi okunamadı", ign); }
             return dark ? H("#60A5FA") : H("#2563EB");
         }
 

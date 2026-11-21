@@ -9,13 +9,22 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("DPI Kalkan")]
-[assembly: AssemblyDescription("GoodbyeDPI kontrol paneli ve internet erişim kalkanı")]
-[assembly: AssemblyProduct("DPI Kalkan")]
-[assembly: AssemblyCopyright("GoodbyeDPI © ValdikSS · WinDivert © basil00")]
-[assembly: AssemblyVersion("2.3.0.0")]
-[assembly: AssemblyFileVersion("2.3.0.0")]
+// Exe sürüm bilgisi (Windows'ta Özellikler → Ayrıntılar). Yayıncı yalnızca bu projedir; GoodbyeDPI (ValdikSS) ve
+// WinDivert (basil00) atıfları lisanslar klasöründe, Hakkında sayfasında ve README'de yer alır.
+// Sürüm tek yerden gelir: üç değer aynı olmalı (build.ps1 denetler ve app.manifest'i buna eşitler).
+[assembly: AssemblyTitle("DPI Kalkan")]                                     // FileDescription
+[assembly: AssemblyDescription("GoodbyeDPI kontrol paneli ve internet erişim kalkanı")]   // Comments
+[assembly: AssemblyCompany(DPIKalkan.App.Publisher)]                       // CompanyName: Osman Barış MEDİNE (Mr Leywin)
+[assembly: AssemblyProduct("DPI Kalkan")]                                   // ProductName
+[assembly: AssemblyCopyright(DPIKalkan.App.Copyright)]                     // LegalCopyright: Copyright (c) 2026 Osman Barış MEDİNE (Mr Leywin)
+[assembly: AssemblyTrademark("")]
+[assembly: System.Resources.NeutralResourcesLanguage("tr-TR")]
+[assembly: AssemblyVersion("2.4.0.0")]
+[assembly: AssemblyFileVersion("2.4.0.0")]
+[assembly: AssemblyInformationalVersion("2.4.0")]                          // ProductVersion
 [assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
+// P/Invoke ile çağrılan tüm DLL'ler (kernel32, user32, dnsapi, dwmapi, uxtheme, wininet) yalnızca System32'den yüklenir
+[assembly: System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
 
 namespace DPIKalkan
 {
@@ -24,10 +33,15 @@ namespace DPIKalkan
         [STAThread]
         static int Main(string[] args)
         {
+            Native.HardenDllSearch();
             // Güncelleme kurulumu: yeni sürümün exe'si tarafından, tek kopya kilidi ve yönetici denetiminden önce çalışır
             int ui = Array.IndexOf(args, "--apply-update");
-            if (ui >= 0 && args.Length >= ui + 5 && int.TryParse(args[ui + 3], out int oldPid))
-                return Updater.Apply(args[ui + 1], args[ui + 2], oldPid, args[ui + 4], args.Length > ui + 5 && args[ui + 5] == "1");
+            if (ui >= 0)
+            {
+                if (args.Length >= ui + 5 && int.TryParse(args[ui + 3], out int oldPid))
+                    return Updater.Apply(args[ui + 1], args[ui + 2], oldPid, args[ui + 4], args.Length > ui + 5 && args[ui + 5] == "1");
+                return 2;
+            }
 #if PREVIEW
             App.Preview = true;
             int mi = Array.IndexOf(args, "--make-icon");
@@ -41,6 +55,13 @@ namespace DPIKalkan
             App.DataDir = Path.Combine(Path.GetTempPath(), "dpikalkan_preview");
             try { Directory.Delete(App.DataDir, true); } catch { }
 #endif
+            // Temiz kaldırma (kurulum paketinin kaldırıcısı da bunu çağırır): çalışan kopyayı kapatır, sistem değişikliklerini geri alır
+            if (args.Contains("--uninstall") && !App.Preview)
+                return Uninstaller.RunCli(quiet: args.Contains("--quiet"));
+            // Kurulum paketi dosyaları değiştirmeden önce: bu klasördeki uygulamayı, GoodbyeDPI'ı ve hizmeti durdurur (ayarlara dokunmaz)
+            if (args.Contains("--prepare-upgrade") && !App.Preview)
+                return Uninstaller.PrepareUpgrade();
+
             bool createdNew;
             var mutex = new Mutex(true, @"Local\DPIKalkan_SingleInstance", out createdNew);
             var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\DPIKalkan_Show");
@@ -59,8 +80,8 @@ namespace DPIKalkan
             ServicePointManager.Expect100Continue = false;
             ServicePointManager.DnsRefreshTimeout = 0;   // .NET DNS önbelleği kapalı: her test güncel DNS yanıtını kullanır
 
-            Application.ThreadException += (s, e) => App.Log("Beklenmeyen hata: " + e.Exception, LogLevel.Error);
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => App.Log("Kritik hata: " + e.ExceptionObject, LogLevel.Error);
+            Application.ThreadException += (s, e) => { App.Log("Beklenmeyen hata: " + e.Exception, LogLevel.Error); CrashMarker.Record(e.Exception, fatal: false); };
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => { App.Log("Kritik hata: " + e.ExceptionObject, LogLevel.Error); CrashMarker.Record(e.ExceptionObject as Exception, fatal: true); };
 
             App.Init();
             Theme.Apply(Palettes.Resolve(App.Settings));
@@ -73,6 +94,7 @@ namespace DPIKalkan
                 return 1;
             }
 
+            CrashMarker.Begin();   // önceki çalışma düzgün kapanmadıysa AfterStartup bildirir
             bool tray = args.Any(a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase));
             bool scanAll = args.Any(a => a.Equals("--scan-all", StringComparison.OrdinalIgnoreCase));
             bool scan = scanAll || args.Any(a => a.Equals("--scan", StringComparison.OrdinalIgnoreCase));
@@ -98,6 +120,7 @@ namespace DPIKalkan
             if (tray && !scan) { var h = form.Handle; } else form.Show();
             form.BeginInvoke(new Action(() => form.AfterStartup(tray, scan, scanAll, updatedFrom, updateFailed, resume)));
             Application.Run(new ApplicationContext());
+            CrashMarker.End();
             GC.KeepAlive(mutex);
             return 0;
         }
@@ -207,6 +230,9 @@ namespace DPIKalkan
                 try { Directory.Delete(t, true); } catch { }
             }
 
+            SecurityTests(Check);
+            Phase2Tests(Check);
+
             if (proxies.Contains("--update-live"))
             {
                 string err;
@@ -216,18 +242,23 @@ namespace DPIKalkan
                 {
                     try
                     {
-                        string zip = Updater.Download(li, null, System.Threading.CancellationToken.None);
-                        string root = Updater.Extract(zip, li.Version);
-                        Check("GitHub'dan indirme + SHA-256 + açma", File.Exists(Path.Combine(root, "DPIKalkan.exe")), root);
-                        File.WriteAllText(Path.Combine(Path.GetTempPath(), "dpk-update-root.txt"), root);
+                        var prep = Updater.DownloadAndExtract(li, null, System.Threading.CancellationToken.None);
+                        string exe = Path.Combine(prep.Root, "DPIKalkan.exe");
+                        Check("GitHub'dan indirme + SHA-256 + aynı tutamaçtan açma", File.Exists(exe) && Integrity.Sha256File(exe) == prep.ExeSha256 &&
+                              prep.Root.StartsWith(Updater.UpdateRoot, StringComparison.OrdinalIgnoreCase), prep.Root);
+                        Check("güncelleme: indirilen zip açıldıktan sonra silinir", !Directory.GetFiles(Updater.UpdateRoot, "*.zip").Any());
+                        File.AppendAllText(exe, "x");   // açıldıktan sonra değiştirilmiş gibi
+                        try { Updater.StartApply(prep); Check("güncelleme: açıldıktan sonra değişen exe başlatılmaz", false); }
+                        catch (InvalidDataException) { Check("güncelleme: açıldıktan sonra değişen exe başlatılmaz", true); }
                     }
-                    catch (Exception ex) { Check("GitHub'dan indirme + SHA-256 + açma", false, ex.Message); }
+                    catch (Exception ex) { Check("GitHub'dan indirme + SHA-256 + aynı tutamaçtan açma", false, ex.Message); }
                     var badInfo = new UpdateInfo { Version = li.Version, AssetName = li.AssetName, AssetUrl = li.AssetUrl, Sha256 = new string('0', 64) };
-                    try { Updater.Download(badInfo, null, System.Threading.CancellationToken.None); Check("yanlış özet reddedilir", false); }
-                    catch (InvalidDataException) { Check("yanlış özet reddedilir", true); }
+                    try { Updater.DownloadAndExtract(badInfo, null, System.Threading.CancellationToken.None); Check("yanlış özet reddedilir", false); }
+                    catch (InvalidDataException) { Check("yanlış özet reddedilir (dosya ve klasör silinir)", !Directory.GetFiles(Updater.UpdateRoot).Any() && !Directory.Exists(Path.Combine(Updater.UpdateRoot, "v" + li.Version))); }
                     var evil = new UpdateInfo { Version = li.Version, AssetName = "x.zip", AssetUrl = "https://example.com/x.zip", Sha256 = new string('0', 64) };
-                    try { Updater.Download(evil, null, System.Threading.CancellationToken.None); Check("GitHub dışı adres reddedilir", false); }
+                    try { Updater.DownloadAndExtract(evil, null, System.Threading.CancellationToken.None); Check("GitHub dışı adres reddedilir", false); }
                     catch (InvalidOperationException) { Check("GitHub dışı adres reddedilir", true); }
+                    Updater.Cleanup();
                 }
             }
 
@@ -266,6 +297,315 @@ namespace DPIKalkan
                 ProxyBridge.Stop(p.Id);
             }
             return sb.ToString();
+        }
+
+        /// <summary>Goodbyedpi.exe'yi yönetici istemeden (RunAsInvoker) çalıştırır: yalnızca parametre ayrıştırmasını görmek için.</summary>
+        static string RunUnelevated(string exe, string args)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo(exe, args)
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(exe),
+            };
+            psi.EnvironmentVariables["__COMPAT_LAYER"] = "RunAsInvoker";
+            using (var p = System.Diagnostics.Process.Start(psi))
+            {
+                var o = p.StandardOutput.ReadToEndAsync();
+                var e = p.StandardError.ReadToEndAsync();
+                if (!p.WaitForExit(10000)) { try { p.Kill(); } catch { } return "zaman aşımı"; }
+                return o.Result + e.Result;
+            }
+        }
+
+        static void Phase2Tests(Action<string, bool, string> Check)
+        {
+            string repo = Path.GetFullPath(Path.Combine(App.BaseDir, ".."));
+            string ver = App.Version, ver4 = ver + ".0";
+
+            // ---------------------------------------------------------------- exe sürüm bilgisi ve manifest
+            var self = System.Diagnostics.FileVersionInfo.GetVersionInfo(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
+            Check("metadata: yayıncı, ürün, açıklama, telif", self.CompanyName == "Osman Barış MEDİNE (Mr Leywin)" && self.ProductName == "DPI Kalkan" && self.FileDescription == "DPI Kalkan" &&
+                  self.LegalCopyright == "Copyright (c) 2026 Osman Barış MEDİNE (Mr Leywin)" && App.Copyright == "Copyright (c) 2026 Osman Barış MEDİNE (Mr Leywin)", self.CompanyName + " | " + self.ProductName + " | " + self.FileDescription + " | " + self.LegalCopyright);
+            Check("metadata: sürümler tutarlı", self.FileVersion == ver4 && self.ProductVersion == ver, self.FileVersion + " / " + self.ProductVersion);
+            string pkgExe = Path.Combine(App.BaseDir, @"paket\DPI Kalkan\DPIKalkan.exe");
+            if (File.Exists(pkgExe))
+            {
+                var pv = System.Diagnostics.FileVersionInfo.GetVersionInfo(pkgExe);
+                string text = System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(pkgExe));
+                var m = System.Text.RegularExpressions.Regex.Match(text, "<assemblyIdentity\\s+version=\"([\\d.]+)\"\\s+name=\"DPIKalkan.app\"");
+                Check("metadata: paketteki exe sürümü ve gömülü manifest sürümü eşit", pv.FileVersion == ver4 && m.Success && m.Groups[1].Value == ver4 &&
+                      text.Contains("requireAdministrator"), pv.FileVersion + " / manifest " + (m.Success ? m.Groups[1].Value : "yok"));
+            }
+            else Check("metadata: paketteki exe (build.ps1 çalıştırılmadı)", false, pkgExe);
+
+            // ---------------------------------------------------------------- betik yorumlayıcısı (PS) hiçbir yerde yok
+            string needle = "power" + "shell";
+            var hits = Directory.GetFiles(Path.Combine(repo, "src"), "*.cs", SearchOption.AllDirectories)
+                .Where(f => File.ReadAllText(f).IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0).Select(Path.GetFileName).ToList();
+            string scripts = Path.Combine(App.BaseDir, @"paket\DPI Kalkan\betikler");
+            if (Directory.Exists(scripts))
+                hits.AddRange(Directory.GetFiles(scripts).Where(f => File.ReadAllText(f).IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0).Select(Path.GetFileName));
+            Check("kaynak kodda ve betiklerde " + "Power" + "Shell geçmiyor", hits.Count == 0, hits.Count == 0 ? "" : string.Join(", ", hits));
+
+            // ---------------------------------------------------------------- şifreli DNS: netsh ve Windows 10 davranışı
+            Check("DoH: Windows 10 (19045) desteklenmiyor, Windows 11 (22000+) destekleniyor",
+                  !SystemDns.DohSupportedOn(19045) && SystemDns.DohSupportedOn(22000) && SystemDns.DohSupportedOn(26100), "bu bilgisayar: " + SystemDns.WindowsBuild);
+            string msg10 = SystemDns.DohUnsupportedMessage(19045);
+            Check("DoH: Windows 10'da anlaşılır uyarı", msg10.Contains("Windows 11") && msg10.Contains("19045") && msg10.Contains("şifresiz"), msg10);
+            var cf = SystemDns.Choices.First(c => c.Id == "cloudflare");
+            var cmds = SystemDns.DohCommands(cf);
+            Check("DoH: netsh komutları (4 adres, add + set)", cmds.Count == 4 &&
+                  cmds.All(c => c.Add.StartsWith("dns add encryption server=") && c.Set.StartsWith("dns set encryption server=") &&
+                                c.Add.EndsWith(" dohtemplate=https://cloudflare-dns.com/dns-query autoupgrade=yes udpfallback=no")), cmds.Count > 0 ? cmds[0].Add : "");
+            Check("DoH: tüm DNS seçenekleri için komut üretilir", SystemDns.Choices.Where(c => !c.IsAuto).All(c => SystemDns.DohCommands(c).Count == 4), "");
+            var evilChoice = new SystemDnsChoice { Id = "x", V4a = "1.1.1.1", Doh = "https://x.example/dns-query & calc" };
+            Check("DoH: güvenli olmayan şablon komuta girmez", SystemDns.DohCommands(evilChoice).Count == 0, "");
+            // bu makinedeki gerçek 'netsh dns show encryption server=…' çıktıları (Windows 11 26300)
+            string shownNo = "\r\nEncryption settings for 1.1.1.1 \r\n----------------------------------------------------------------------\r\n" +
+                             "DNS-over-HTTPS template     : https://cloudflare-dns.com/dns-query\r\nAuto-upgrade                : no\r\nUDP-fallback                : no\r\n";
+            var pNo = SystemDns.ParseEncryption(shownNo);
+            var pYes = SystemDns.ParseEncryption(shownNo.Replace("Auto-upgrade                : no", "Auto-upgrade                : yes"));
+            var pV6 = SystemDns.ParseEncryption(shownNo.Replace("1.1.1.1", "2606:4700:4700::1111"));
+            var pNone = SystemDns.ParseEncryption("\r\n");
+            Check("DoH: netsh çıktısı ayrıştırılır (yerleşik kayıt Auto-upgrade: no → yes, kayıt yok, IPv6 başlık)",
+                  pNo.Exists && pNo.AutoUpgrade == false && pNo.UdpFallback == false && pNo.Template == "https://cloudflare-dns.com/dns-query" &&
+                  pYes.AutoUpgrade == true && pV6.Exists && pV6.Template.Length > 0 && !pNone.Exists && pNone.AutoUpgrade == null, "");
+            Check("DoH: genel ayar okunur", SystemDns.ParseGlobalDoh("\r\nDoH settings                : enabled\r\n\r\nDoT settings                : enabled\r\n") == "enabled" &&
+                  SystemDns.ParseGlobalDoh("") == null, "");
+            Check("DoH: komutlarda sunucu adresi ayrı tutulur (geri okuma ve yedek için)", cmds.All(c => c.Add.Contains("server=" + c.Ip + " ")) && cmds[0].Ip == cf.V4a, "");
+
+            // ---------------------------------------------------------------- kurulum paketiyle güncelleme
+            string relJson = "{\"tag_name\":\"v9.8.7\",\"draft\":false,\"prerelease\":false,\"body\":\"x\",\"assets\":[" +
+                "{\"name\":\"DPI-Kalkan-9.8.7.zip\",\"browser_download_url\":\"https://github.com/x/y/releases/download/v9.8.7/DPI-Kalkan-9.8.7.zip\",\"size\":1,\"digest\":\"sha256:" + new string('a', 64) + "\"}," +
+                "{\"name\":\"DPI-Kalkan-9.8.7-Setup.exe\",\"browser_download_url\":\"https://github.com/x/y/releases/download/v9.8.7/DPI-Kalkan-9.8.7-Setup.exe\",\"size\":2,\"digest\":\"sha256:" + new string('b', 64) + "\"}," +
+                "{\"name\":\"SHA256SUMS.txt\",\"browser_download_url\":\"https://github.com/x/y/s\",\"size\":3,\"digest\":null}]}";
+            var ri = Updater.Parse(relJson);
+            Check("güncelleme: zip ve Setup.exe ayrı ayrı ayrıştırılır", ri.AssetName == "DPI-Kalkan-9.8.7.zip" && ri.Sha256 == new string('a', 64) &&
+                  ri.SetupName == "DPI-Kalkan-9.8.7-Setup.exe" && ri.SetupSha256 == new string('b', 64), ri.SetupName);
+            string notes = "**SHA-256** (DPI-Kalkan-9.8.7.zip): `" + new string('c', 64) + "`\\n\\n**SHA-256** (DPI-Kalkan-9.8.7-Setup.exe): `" + new string('d', 64) + "`";
+            var rn = Updater.Parse(relJson.Replace("\"digest\":\"sha256:" + new string('a', 64) + "\"", "\"digest\":null")
+                                          .Replace("\"digest\":\"sha256:" + new string('b', 64) + "\"", "\"digest\":null").Replace("\"body\":\"x\"", "\"body\":\"" + notes + "\""));
+            Check("güncelleme: özetler sürüm notundan dosya adına göre okunur", rn.Sha256 == new string('c', 64) && rn.SetupSha256 == new string('d', 64), rn.Sha256.Substring(0, 4) + " " + rn.SetupSha256.Substring(0, 4));
+            Check("güncelleme: kurulumlu sürüm Setup.exe, taşınabilir zip kullanır", Updater.UseSetup(ri, true) && !Updater.UseSetup(ri, false) &&
+                  !Updater.UseSetup(Updater.Parse(relJson.Replace("-Setup.exe", "-Kurulum.exe")), true), "");
+            Check("güncelleme: kurulum kaydı yalnızca aynı ve korumalı klasörde geçerli",
+                  Updater.IsInnoInstall(@"C:\Program Files\DPI Kalkan\", @"C:\Program Files\DPI Kalkan\", true) &&
+                  !Updater.IsInnoInstall(@"C:\Program Files\DPI Kalkan", @"C:\Program Files\DPI Kalkan\", false) &&
+                  !Updater.IsInnoInstall(@"C:\Users\x\Desktop\DPI Kalkan", @"C:\Program Files\DPI Kalkan\", true) &&
+                  !Updater.IsInnoInstall(@"C:\Program Files\DPI Kalkan", null, true), "");
+
+            string iss = Path.Combine(repo, @"installer\DPIKalkan.iss");
+            if (File.Exists(iss))
+            {
+                string s = File.ReadAllText(iss);
+                Check("kurulum betiği: AppId uygulamadakiyle aynı, yükseltme/kaldırma kancaları var",
+                      s.Contains("AppId={" + Updater.InnoAppId) && s.Contains("--prepare-upgrade") && s.Contains("--uninstall --quiet") &&
+                      s.Contains("PrivilegesRequired=admin") && s.Contains("ArchitecturesAllowed=x64compatible") && s.Contains("{param:DKUPDATED|}"), "");
+                // requireAdministrator manifestli exe yetkisiz başlatılırsa CreateProcess 740 verir: tüm başlatmalar yönetici kimliğiyle
+                var codeLines = s.Split('\n').Select(l => l.Trim()).Where(l => !l.StartsWith(";") && !l.StartsWith("{") && !l.StartsWith("//")).ToList();
+                var launches = codeLines.Where(l => l.StartsWith("Filename:") && l.Contains("{#AppExe}")).ToList();
+                Check("kurulum betiği: DPIKalkan.exe her yerde runascurrentuser ile başlatılır (740 hatası yok)",
+                      launches.Count == 3 && launches.All(l => l.Contains("runascurrentuser")) &&
+                      !codeLines.Any(l => l.Contains("runasoriginaluser") || l.Contains("ExecAsOriginalUser")), launches.Count + " başlatma");
+            }
+            string setup = Path.Combine(repo, "dist", "DPI-Kalkan-" + ver + "-Setup.exe");
+            if (File.Exists(setup))
+            {
+                var sv = System.Diagnostics.FileVersionInfo.GetVersionInfo(setup);
+                string spn = (sv.ProductName ?? "").Trim(), sfv = (sv.FileVersion ?? "").Trim(), sco = (sv.CompanyName ?? "").Trim();
+                // Inno Setup sürüm dizgilerini boşlukla doldurur; güncelleyici Trim ile karşılaştırır
+                Check("kurulum paketi: sürüm bilgisi güncelleyicinin beklediği gibi", spn == "DPI Kalkan" && sfv == ver4 && sco == "Osman Barış MEDİNE (Mr Leywin)" && (sv.LegalCopyright ?? "").Trim() == "Copyright (c) 2026 Osman Barış MEDİNE (Mr Leywin)",
+                      spn + " " + sfv + " " + sco + " (dolgulu: " + (sv.ProductName != spn) + ")");
+            }
+
+            // ---------------------------------------------------------------- SHA256SUMS listesi gerçek dosyalarla aynı
+            string sumsFile = Path.Combine(repo, "dist", "DPI-Kalkan-" + ver + ".SHA256SUMS.txt");
+            if (File.Exists(sumsFile))
+            {
+                var bad = new List<string>();
+                int n = 0;
+                foreach (var line in File.ReadAllLines(sumsFile).Where(l => l.Length > 66))
+                {
+                    string h = line.Substring(0, 64), name = line.Substring(66);
+                    string path = name.StartsWith("DPI Kalkan/") ? Path.Combine(App.BaseDir, "paket", name.Replace('/', '\\')) : Path.Combine(repo, "dist", name);
+                    n++;
+                    if (!File.Exists(path) || Integrity.Sha256File(path) != h) bad.Add(name);
+                }
+                Check("SHA256SUMS: tüm satırlar dosyalarla eşleşir", bad.Count == 0 && n >= 9, n + " satır " + string.Join(", ", bad));
+            }
+            else Check("SHA256SUMS dosyası (build.ps1 çalıştırılmadı)", false, sumsFile);
+
+            // ---------------------------------------------------------------- beklenmedik kapanış işareti
+            {
+                bool oldPreview = App.Preview;
+                string oldData = App.DataDir;
+                string t = Path.Combine(Path.GetTempPath(), "dpk-crash-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                try
+                {
+                    App.Preview = false;
+                    App.DataDir = t;
+                    CrashMarker.Begin();
+                    bool clean = CrashMarker.PreviousUnexpected == null;
+                    CrashMarker.End();
+                    CrashMarker.Begin();
+                    bool stillClean = CrashMarker.PreviousUnexpected == null;     // düzgün kapanış sonrası uyarı yok
+                    CrashMarker.Record(new InvalidOperationException("deneme çökmesi"), fatal: true);
+                    CrashMarker.Begin();                                             // End çağrılmadan yeniden açılış = çökme
+                    string prev = CrashMarker.PreviousUnexpected;
+                    CrashMarker.Clear(t);
+                    CrashMarker.Begin();
+                    bool clearedOk = CrashMarker.PreviousUnexpected == null;        // araçlarımız bilerek kapattıysa uyarı yok
+                    CrashMarker.End();
+                    Check("çökme işareti: düzgün kapanışta uyarı yok, çökmede DK-106 ve son hata", clean && stillClean && prev != null && prev.Contains("deneme çökmesi") && clearedOk, prev ?? "");
+                }
+                finally
+                {
+                    App.Preview = oldPreview;
+                    App.DataDir = oldData;
+                    try { Directory.Delete(t, true); } catch { }
+                }
+            }
+
+            // ---------------------------------------------------------------- antivirüs metinleri
+            var avSteps = ErrorCatalog.All.SelectMany(e => e.Steps).Where(s => s.IndexOf("istisna", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            Check("antivirüs: istisna yalnızca 'son çare' olarak öneriliyor", avSteps.Count > 0 && avSteps.All(s => s.Contains("Son çare")), avSteps.Count + " adım");
+            var fp = new[] { "DK-102", "DK-202", "DK-204" }.Select(ErrorCatalog.Get).ToList();
+            Check("antivirüs: yanlış pozitif bildirimi ve SHA-256 doğrulaması önce geliyor", fp.All(e => e.Fix == FixKind.ReportFalsePositive || e.Fix2 == FixKind.ReportFalsePositive) &&
+                  fp.All(e => e.Steps.Any(s => s.Contains("wdsi")) && e.Steps.Any(s => s.Contains("SHA-256"))) &&
+                  ErrorInfo.FixLabel(FixKind.ReportFalsePositive).Length > 0 && ErrorCatalog.Get("DK-106") != null, "");
+        }
+
+        static void SecurityTests(Action<string, bool, string> Check)
+        {
+            // ---------------------------------------------------------------- parametre beyaz listesi
+            var bad = Profiles.BuiltIns.Where(x => !ArgPolicy.ValidateProfile(x, out _)).Select(x => x.Id).ToList();
+            Check("beyaz liste: tüm hazır profiller geçer", bad.Count == 0, bad.Count == 0 ? Profiles.BuiltIns.Count + " profil" : string.Join(", ", bad));
+            foreach (var a in new[] { "--blacklist x.txt", "--black x.txt", "--bl x", "--blacklist=x", "-5 & calc", "-9 --dns-addr 1.1.1.1&calc",
+                                      "--dns-ad 1.1.1.1", "--set-ttl 999", "--set-ttl -5", "--zzz", "-e", "-9 \"x\"", "-9 %PATH%", "-9\r\nstart calc",
+                                      "--dns-addr 1.1.1", "--dnsv6-addr 1.1.1.1", "-pqr", "-f2", "--wrong-seq=1", "--fake-from-hex 12z4", "-9 x", "-9 \\\\host\\share" })
+                Check("beyaz liste reddeder: " + a.Replace("\r\n", "⏎"), !ArgPolicy.Validate(a, out _), "");
+            foreach (var a in new[] { "-9", "-5 --set-ttl 5 --dns-addr 77.88.8.8 --dns-port 1253 --dnsv6-addr 2a02:6b8::feed:0ff --dnsv6-port 1253",
+                                      "--auto-ttl=1-4-10 --max-payload=1200 --auto-ttl --max-payload", "-e 2 --fake-from-hex 1234abcd --fake-gen 5 --fake-resend 2 -q" })
+                Check("beyaz liste kabul eder: " + a, ArgPolicy.Validate(a, out var ge), ge);
+
+            // ---------------------------------------------------------------- GoodbyeDPI'ın getopt_long davranışı (beyaz listenin gerekçesi)
+            string tp = Path.GetFullPath(Path.Combine(App.BaseDir, @"..\third_party\goodbyedpi"));
+            string gdpi = Path.Combine(tp, "x86_64", "goodbyedpi.exe");
+            if (File.Exists(gdpi))
+            {
+                string nofile = @"C:\dpk-yok\yok.txt";
+                string full = RunUnelevated(gdpi, "--blacklist " + nofile), abbr = RunUnelevated(gdpi, "--black " + nofile), unk = RunUnelevated(gdpi, "--zzz");
+                Check("getopt_long: '--black' kısaltması GoodbyeDPI'da --blacklist olarak çalışıyor (eski Contains denetimi atlatılabiliyordu)",
+                      full.Contains("Can't load blacklist") && abbr.Contains("Can't load blacklist") && unk.Contains("Usage"), abbr.Trim().Split('\n').Last().Trim());
+            }
+            else Check("getopt_long testi (third_party bulunamadı)", false, tp);
+
+            // ---------------------------------------------------------------- profil kodu ve betik güvenliği
+            var basep = Profiles.BuiltIns.First(x => x.Id == "tr-alt").CloneAsCustom();
+            var ev = basep.CloneAsCustom();
+            ev.UseRaw = true; ev.RawArgs = "-9 --black C:\\x.txt";
+            Check("profil kodu: kısaltılmış --blacklist reddedilir", !ProfileCode.TryFromCode(ProfileCode.ToCode(ev), out _, out _), "");
+            ev.RawArgs = "-9 & calc";
+            Check("profil kodu: komut karakteri reddedilir", !ProfileCode.TryFromCode(ProfileCode.ToCode(ev), out _, out _), "");
+            ev.RawArgs = "-9"; ev.Name = "Ad\r\nstart calc"; ev.Description = "a\nb";
+            bool okc = ProfileCode.TryFromCode(ProfileCode.ToCode(ev), out var cleaned, out var cerr);
+            Check("profil kodu: ad/açıklamadaki satır sonları temizlenir", okc && !cleaned.Name.Contains("\n") && !cleaned.Description.Contains("\n"), cerr);
+            var raw = basep.CloneAsCustom(); raw.UseRaw = true; raw.RawArgs = "-9"; raw.Name = "x\r\nstart calc ^"; raw.Description = "%PATH% & del\r\nstart y";
+            string script = Scripts.Build(raw, "..\\bin");
+            Check("betik: REM satırlarından komut sızmaz", script.Split('\n').Count(l => l.TrimStart().StartsWith("start ")) == 1 && !script.Contains("%PATH%") && !script.Contains("^"), "");
+            raw.RawArgs = "-9 & calc";
+            try { Scripts.Build(raw, "..\\bin"); Check("betik: güvenli olmayan profil betiğe dönüşmez", false, ""); }
+            catch (InvalidDataException) { Check("betik: güvenli olmayan profil betiğe dönüşmez", true, ""); }
+
+            // ---------------------------------------------------------------- program bazlı proxy: cmd satırı
+            var openP = new ProxyEntry { Kind = ProxyKind.Http, Host = "5.6.7.8", Port = 3128 };
+            bool Throws(Action a) { try { a(); return false; } catch (ArgumentException) { return true; } }
+            Check("ortam modu: '& calc' ek parametresi reddedilir", Throws(() => AppProxy.Plan(new ProxyApp { Name = "A", ExePath = @"C:\X\t.exe", Mode = AppProxyMode.Env, ExtraArgs = "& calc" }, openP)), "");
+            Check("ortam modu: yolda % reddedilir", Throws(() => AppProxy.Plan(new ProxyApp { Name = "A", ExePath = @"C:\X\%PATH%\t.exe", Mode = AppProxyMode.Env }, openP)), "");
+            Check("ortam modu: adreste tırnak reddedilir", Throws(() => AppProxy.Plan(new ProxyApp { Name = "A", ExePath = @"C:\X\t.exe", Mode = AppProxyMode.Env },
+                                                                     new ProxyEntry { Kind = ProxyKind.Http, Host = "1.2.3.4\"&calc&\"", Port = 80 })), "");
+            Check("ortam modu: parantezli normal yol kabul edilir", !Throws(() => AppProxy.Plan(new ProxyApp { Name = "A", ExePath = @"C:\Program Files (x86)\X\t.exe", Mode = AppProxyMode.Env, ExtraArgs = "--verbose" }, openP)), "");
+
+            // ---------------------------------------------------------------- dosya bütünlüğü ve kilit
+            foreach (var root in new[] { tp, Path.Combine(App.BaseDir, @"paket\DPI Kalkan\bin") })
+                if (Directory.Exists(root)) Check("gömülü SHA-256 özetleri eşleşir: " + root.Substring(Math.Max(0, root.Length - 30)), Integrity.VerifyTree(root, out var ie), ie);
+            if (File.Exists(gdpi))
+            {
+                string t = Path.Combine(Path.GetTempPath(), "dpk-int-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                Directory.CreateDirectory(t);
+                foreach (var f in new[] { "goodbyedpi.exe", "WinDivert.dll", "WinDivert64.sys" }) File.Copy(Path.Combine(tp, "x86_64", f), Path.Combine(t, f));
+                var files = new[] { "goodbyedpi.exe", "WinDivert.dll", "WinDivert64.sys" };
+                using (var h = Integrity.VerifyAndLock(t, "x86_64", files, out var e1))
+                {
+                    Check("bütünlük: resmi dosyalar doğrulanır", h != null, e1);
+                    bool writeBlocked;
+                    try { using (new FileStream(Path.Combine(t, "goodbyedpi.exe"), FileMode.Open, FileAccess.Write, FileShare.ReadWrite)) { } writeBlocked = false; }
+                    catch (IOException) { writeBlocked = true; }
+                    Check("bütünlük: doğrulama sonrası exe yazmaya kapalı", writeBlocked, "");
+                    string outp = RunUnelevated(Path.Combine(t, "goodbyedpi.exe"), "--zzz");
+                    Check("bütünlük: kilit açıkken GoodbyeDPI ve WinDivert.dll yüklenebiliyor", outp.Contains("Usage"), outp.Length > 0 ? "" : "çıktı yok");
+                }
+                File.AppendAllText(Path.Combine(t, "WinDivert.dll"), "x");
+                using (var h2 = Integrity.VerifyAndLock(t, "x86_64", files, out var e2))
+                    Check("bütünlük: değiştirilmiş WinDivert.dll reddedilir", h2 == null && e2.Contains("WinDivert.dll"), e2);
+                try { Directory.Delete(t, true); } catch { }
+            }
+
+            // ---------------------------------------------------------------- korumalı klasör denetimi
+            Check("korumalı klasör: Program Files", InstallGuard.Check(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), out var r1), r1);
+            Check("korumalı klasör: System32", InstallGuard.Check(Environment.SystemDirectory, out var r2), r2);
+            Check("korumasız klasör: Temp", !InstallGuard.Check(Path.GetTempPath(), out var r3), r3);
+            {
+                string ud = Path.Combine(Path.GetTempPath(), "dpk-tasinabilir-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                Directory.CreateDirectory(Path.Combine(ud, "bin", "x86_64"));
+                Check("korumasız klasör: kullanıcının yazabildiği yeni klasör", !InstallGuard.Check(ud, out var r4), r4);
+                try { Directory.Delete(ud, true); } catch { }
+            }
+            Check("korumasız klasör: olmayan klasör", !InstallGuard.Check(@"C:\dpk-yok-" + Guid.NewGuid().ToString("N"), out var r5), r5);
+
+            // ---------------------------------------------------------------- güvenli süreç yardımcısı
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var pr = Sys.Run(Sys.SystemExe("ping.exe"), "-n 30 127.0.0.1", 1500);
+            Check("süreç yardımcısı: süre dolunca sonlandırır", pr.Code == -2 && sw.ElapsedMilliseconds < 7000, sw.ElapsedMilliseconds + " ms");
+            var pr2 = Sys.Run(Sys.SystemExe("cmd.exe"), "/c for /l %i in (1,1,1500) do @(echo cikti%i & echo hata%i 1>&2)", 30000);
+            Check("süreç yardımcısı: büyük stdout+stderr kilitlenmeden okunur", pr2.Code == 0 && pr2.Output.Contains("cikti1500") && pr2.Output.Contains("hata1500"), pr2.Output.Length + " karakter");
+
+            // ---------------------------------------------------------------- Görev Zamanlayıcı (COM) ve DLL arama kısıtlaması
+            Check("Görev Zamanlayıcı COM bağlantısı", Startup.Probe(out var se), se + (Startup.IsEnabled() ? " (görev: " + Startup.CommandPath() + ")" : " (görev yok)"));
+            Check("DLL kısıtlıyken WMI çalışır", Engine.ServicePath("Winmgmt") != null, "");
+            bool zipOk;
+            try
+            {
+                using (var ms = new MemoryStream())
+                {
+                    using (var za = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, true))
+                    using (var w = new StreamWriter(za.CreateEntry("a.txt").Open())) w.Write(new string('x', 5000));
+                    ms.Position = 0;
+                    using (var za = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Read))
+                    using (var rd = new StreamReader(za.Entries[0].Open())) zipOk = rd.ReadToEnd().Length == 5000;
+                }
+            }
+            catch { zipOk = false; }
+            Check("DLL kısıtlıyken zip (clrcompression) çalışır", zipOk, "");
+
+            // ---------------------------------------------------------------- güncelleme yolları
+            Check("güncelleme: güvenilen adresler", Updater.TrustedUrl("https://github.com/x") && Updater.TrustedUrl("https://objects.githubusercontent.com/x") &&
+                  !Updater.TrustedUrl("http://github.com/x") && !Updater.TrustedUrl("https://github.com.evil.example/x") && !Updater.TrustedUrl("https://evilgithubusercontent.com/x"), "");
+            {
+                string t = Path.Combine(Path.GetTempPath(), "dpk-val-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                string dst = Path.Combine(t, "kurulu");
+                Directory.CreateDirectory(dst);
+                File.Copy(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName, Path.Combine(dst, "DPIKalkan.exe"));
+                string src = Path.Combine(dst, "veri", "guncelleme", "v9.9.9", "DPI Kalkan");
+                string legacy = Path.Combine(Updater.LegacyRoot, "v9.9.9", "DPI Kalkan");
+                Check("güncelleme yolu: veri\\guncelleme kabul", Updater.ValidateApplyArgs(src, dst, Path.Combine(src, "DPIKalkan.exe"), out var v1), v1);
+                Check("güncelleme yolu: 2.3.0'ın eski Temp klasörü kabul", Updater.ValidateApplyArgs(legacy, dst, Path.Combine(legacy, "DPIKalkan.exe"), out var v2), v2);
+                Check("güncelleme yolu: başka klasör reddedilir", !Updater.ValidateApplyArgs(Path.Combine(t, "baska"), dst, Path.Combine(t, "baska", "DPIKalkan.exe"), out _), "");
+                Check("güncelleme yolu: ..\\ ile kaçış reddedilir", !Updater.ValidateApplyArgs(Path.Combine(dst, @"veri\guncelleme\..\..\x"), dst, Path.Combine(dst, @"x\DPIKalkan.exe"), out _), "");
+                Check("güncelleme yolu: kaynak dışından çalışan güncelleyici reddedilir", !Updater.ValidateApplyArgs(src, dst, Path.Combine(t, "DPIKalkan.exe"), out _), "");
+                Check("güncelleme yolu: DPI Kalkan olmayan hedef reddedilir", !Updater.ValidateApplyArgs(src, t, Path.Combine(src, "DPIKalkan.exe"), out _), "");
+                try { Directory.Delete(t, true); } catch { }
+            }
         }
     }
 

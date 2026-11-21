@@ -549,7 +549,10 @@ namespace DPIKalkan
             if (aProxy.SelectedIndex < 0 || aProxy.SelectedIndex >= App.Settings.Proxies.Count) { Warn("Bir proxy seçin."); return false; }
             a.Name = aName.Text.Trim().Length > 0 ? aName.Text.Trim() : Path.GetFileNameWithoutExtension(a.ExePath);
             a.ProxyId = App.Settings.Proxies[aProxy.SelectedIndex].Id;
-            a.ExtraArgs = aArgs.Text.Trim();
+            string extraArgs = aArgs.Text.Trim();
+            if (CmdLine.HasControlChars(extraArgs) || (a.Mode == AppProxyMode.Env && !CmdLine.BareSafe(extraArgs)))
+            { Warn("Ek parametrelerde & | < > ^ % ! karakterleri kullanılamaz (bu mod komut satırı üzerinden başlatır)."); return false; }
+            a.ExtraArgs = extraArgs;
             a.SeparateProfile = aSeparate.Checked;
             a.CloseRunning = aClose.Checked;
             App.Save();
@@ -621,7 +624,7 @@ namespace DPIKalkan
                 if (icoFile != null && File.Exists(icoFile)) ic = new Icon(icoFile, D(24), D(24));
                 else if (File.Exists(a.ExePath)) ic = Icon.ExtractAssociatedIcon(a.ExePath);
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Program simgesi okunamadı", ign); }
             if (ic != null) using (ic) g.DrawIcon(ic, new Rectangle(r.X + D(10), r.Y + D(11), D(24), D(24)));
             var p = App.Settings.Proxies.FirstOrDefault(x => x.Id == a.ProxyId);
             var flags = TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;

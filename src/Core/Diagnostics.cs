@@ -36,7 +36,7 @@ namespace DPIKalkan
                             if (!string.IsNullOrEmpty(n) && !list.Contains(n)) list.Add(n);
                         }
             }
-            catch { }
+            catch (Exception ign) { App.Ignored("Antivirüs bilgisi okunamadı", ign); }
             return list;
         }
 
@@ -77,6 +77,14 @@ namespace DPIKalkan
             string missing = Engine.MissingFile();
             Add("GoodbyeDPI dosyaları", missing == null ? CheckStatus.Ok : CheckStatus.Fail,
                 missing == null ? "goodbyedpi.exe ve WinDivert dosyaları yerinde." : missing + " bulunamadı.", "DK-102");
+            if (missing == null)
+                using (var held = Integrity.VerifyAndLock(Engine.BinDir, Engine.Arch, Engine.RequiredFiles, out string intErr))
+                    Add("Dosya bütünlüğü", held != null ? CheckStatus.Ok : CheckStatus.Fail,
+                        held != null ? "GoodbyeDPI ve WinDivert dosyaları resmi 0.2.3rc3 sürümüyle aynı (SHA-256)." : intErr, "DK-105");
+            bool prot = InstallGuard.Evaluate(true);
+            Add("Kurulum türü", prot ? CheckStatus.Ok : CheckStatus.Info,
+                prot ? "Kurulumlu sürüm (yönetici korumalı klasör): arka plan hizmeti ve açılış görevi kullanılabilir."
+                     : "Taşınabilir sürüm: koruma uygulama modunda çalışır; hizmet ve açılış görevi kapalı. (" + InstallGuard.Reason + ")");
 
             await Task.Run(() =>
             {
@@ -112,7 +120,7 @@ namespace DPIKalkan
             var thirdParty = av.Where(n => n.IndexOf("Windows Defender", StringComparison.OrdinalIgnoreCase) < 0 &&
                                            n.IndexOf("Microsoft Defender", StringComparison.OrdinalIgnoreCase) < 0).ToList();
             Add("Antivirüs", thirdParty.Count > 0 ? CheckStatus.Info : CheckStatus.Ok,
-                av.Count == 0 ? "Bilgi alınamadı." : string.Join(", ", av) + (thirdParty.Count > 0 ? " – sürücü hatası alırsanız istisna ekleyin." : ""), "DK-207");
+                av.Count == 0 ? "Bilgi alınamadı." : string.Join(", ", av) + (thirdParty.Count > 0 ? " – sürücü hatası alırsanız DK-204'teki adımları izleyin." : ""), "DK-207");
             if (thirdParty.Count > 0) App.Problems.Clear("DK-207");
 
             // ------------------------------------------------ ağ
@@ -247,14 +255,22 @@ namespace DPIKalkan
         }
 
         /// <param name="binRef">goodbyedpi klasörü; göreli ise betiğin konumuna göre (%~dp0).</param>
+        /// <summary>
+        /// Profil için .cmd betiği üretir. Parametreler beyaz listeden geçmezse betik üretilmez (komut eklenemez);
+        /// ad ve açıklama REM satırlarına yalnızca güvenli karakterlerle yazılır (satır sonu eklenemez).
+        /// </summary>
         public static string Build(Profile p, string binRef)
         {
+            if (!ArgPolicy.ValidateProfile(p, out string argErr))
+                throw new InvalidDataException("'" + CmdLine.RemText(Ascii(p.Name)) + "' profili güvenli olmayan bir parametre içerdiği için betiğe dönüştürülmedi: " + argErr);
+            if (!CmdLine.QuotedSafe(binRef))
+                throw new InvalidDataException("Uygulama klasörünün yolu betikte kullanılamayan bir karakter (% ! \") içeriyor.");
             var sb = new StringBuilder();
             sb.AppendLine("@ECHO OFF");
             sb.AppendLine("REM ================================================================");
-            sb.AppendLine("REM  DPI Kalkan - \"" + Ascii(p.Name) + "\" yontemi");
-            foreach (var l in Wrap(Ascii(p.Description), 62)) sb.AppendLine("REM  " + l);
-            sb.AppendLine("REM  DNS yonlendirme: " + Ascii(p.DnsLabel));
+            sb.AppendLine("REM  DPI Kalkan - \"" + CmdLine.RemText(Ascii(p.Name)) + "\" yontemi");
+            foreach (var l in Wrap(CmdLine.RemText(Ascii(p.Description)), 62)) sb.AppendLine("REM  " + l);
+            sb.AppendLine("REM  DNS yonlendirme: " + CmdLine.RemText(Ascii(p.DnsLabel)));
             sb.AppendLine("REM  Calistirinca yonetici izni istenir. Durdurmak icin acilan");
             sb.AppendLine("REM  GoodbyeDPI penceresini kapatin ya da durdur.cmd'yi calistirin.");
             sb.AppendLine("REM  Ayni anda yalnizca BIR betik calistirin.");
@@ -283,12 +299,13 @@ namespace DPIKalkan
                 string name = i.ToString("00") + "_" + Slug(p.Name) + ".cmd";
                 Write(p, Path.Combine(dir, name), "..\\bin");
             }
+            // Yönetici izni betik içinden zorla yükseltilmez (betik yorumlayıcısı kullanılmaz): kullanıcıdan sağ tık → Yönetici olarak çalıştır istenir
+            const string needAdmin = "net session >NUL 2>&1 || (echo Bu betige sag tiklayip \"Yonetici olarak calistir\" secin. & pause & exit /b 1)\r\n";
             File.WriteAllText(Path.Combine(dir, "durdur.cmd"),
-                "@ECHO OFF\r\nREM Calisan tum GoodbyeDPI islemlerini kapatir (yonetici izni ister).\r\n" +
-                "powershell -NoProfile -Command \"Start-Process taskkill -ArgumentList '/F /IM goodbyedpi.exe' -Verb RunAs -WindowStyle Hidden\"\r\n", Encoding.ASCII);
+                "@ECHO OFF\r\nREM Calisan tum GoodbyeDPI islemlerini kapatir. Sag tik -> Yonetici olarak calistir.\r\n" + needAdmin +
+                "taskkill /F /IM goodbyedpi.exe\r\npause\r\n", Encoding.ASCII);
             File.WriteAllText(Path.Combine(dir, "sifirla.cmd"),
-                "@ECHO OFF\r\nREM GoodbyeDPI hizmetlerini ve WinDivert surucu kaydini kaldirir (eski ayarlari_sifirla.cmd).\r\n" +
-                "net session >NUL 2>&1 || (powershell -NoProfile -Command \"Start-Process '%~f0' -Verb RunAs\" & exit /b)\r\n" +
+                "@ECHO OFF\r\nREM GoodbyeDPI hizmetlerini ve WinDivert surucu kaydini kaldirir (eski ayarlari_sifirla.cmd). Sag tik -> Yonetici olarak calistir.\r\n" + needAdmin +
                 "taskkill /F /IM goodbyedpi.exe >NUL 2>&1\r\n" +
                 "for %%s in (GoodbyeDPI DPIKalkan WinDivert WinDivert14) do (sc stop %%s >NUL 2>&1 & sc delete %%s >NUL 2>&1)\r\n" +
                 "ipconfig /flushdns >NUL\r\necho Sifirlama tamamlandi. Bilgisayari yeniden baslatmaniz onerilir.\r\npause\r\n", Encoding.ASCII);
@@ -318,8 +335,8 @@ namespace DPIKalkan
                 foreach (var l in Wrap(Ascii(p.Description), 70)) readme.AppendLine("    " + l);
             }
             readme.AppendLine();
-            readme.AppendLine("durdur.cmd  : calisan tum GoodbyeDPI islemlerini kapatir.");
-            readme.AppendLine("sifirla.cmd : hizmetleri ve surucu kaydini temizler (sorun olursa).");
+            readme.AppendLine("durdur.cmd  : calisan tum GoodbyeDPI islemlerini kapatir (sag tik -> Yonetici olarak calistir).");
+            readme.AppendLine("sifirla.cmd : hizmetleri ve surucu kaydini temizler (sag tik -> Yonetici olarak calistir).");
             File.WriteAllText(Path.Combine(dir, "BETIKLER_OKUBENI.txt"), readme.ToString().Replace("\n", "\r\n").Replace("\r\r\n", "\r\n"), Encoding.ASCII);
         }
     }

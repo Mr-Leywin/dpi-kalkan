@@ -314,12 +314,15 @@ namespace DPIKalkan
                     p = (Profile)Ser.Deserialize(r);
             }
             catch { error = "Profil kodu bozuk ya da eksik kopyalanmış."; return false; }
-            if ((p.RawArgs ?? "").Contains("--blacklist") || (p.ExtraArgs ?? "").Contains("--blacklist"))
-            { error = "Kod güvenli olmayan bir parametre (--blacklist) içeriyor."; p = null; return false; }
+            if (p == null) { error = "Profil kodu boş."; return false; }
+            if (!ArgPolicy.ValidateProfile(p, out string argErr))
+            { error = "Kod güvenli olmayan ya da tanınmayan bir parametre içeriyor: " + argErr; p = null; return false; }
             p.Id = Guid.NewGuid().ToString("N");
             p.BuiltIn = false;
             p.Group = "Özel";
             p.Priority = 1000;
+            p.Name = ArgPolicy.CleanText(p.Name, 80);
+            p.Description = ArgPolicy.CleanText(p.Description, 600);
             if (string.IsNullOrWhiteSpace(p.Name)) p.Name = "İçe aktarılan profil";
             return true;
         }
@@ -338,6 +341,16 @@ namespace DPIKalkan
         public List<string> V4 { get; set; } = new List<string>();
         public bool V6Dhcp { get; set; }
         public List<string> V6 { get; set; } = new List<string>();
+    }
+
+    /// <summary>DPI Kalkan şifreli DNS kaydını değiştirmeden önceki durum (geri alma için).</summary>
+    public class DohBackup
+    {
+        public string Server { get; set; } = "";
+        public bool Existed { get; set; }
+        public string Template { get; set; } = "";
+        public bool AutoUpgrade { get; set; }
+        public bool UdpFallback { get; set; }
     }
 
     public class AppSettings
@@ -365,6 +378,9 @@ namespace DPIKalkan
         public DateTime? LastScanTime { get; set; }
         public string LastScanResult { get; set; } = "";
         public List<DnsBackup> DnsBackups { get; set; } = new List<DnsBackup>();
+        public List<DohBackup> DohBackups { get; set; } = new List<DohBackup>();
+        /// <summary>Genel DoH ayarı DPI Kalkan değiştirmeden önce kapalı/otomatikse eski değeri (değiştirilmediyse null).</summary>
+        public string GlobalDohBackup { get; set; }
         /// <summary>Erişim kesilince çalışan yöntemi kendiliğinden bul.</summary>
         public bool AutoHeal { get; set; } = true;
         /// <summary>Bağlantı bekçisi aralığı (dakika, 0 = kapalı).</summary>
@@ -402,6 +418,7 @@ namespace DPIKalkan
             if (CustomProfiles == null) CustomProfiles = new List<Profile>();
             if (ThemeOverrides == null) ThemeOverrides = new List<ThemeColor>();
             if (DnsBackups == null) DnsBackups = new List<DnsBackup>();
+            if (DohBackups == null) DohBackups = new List<DohBackup>();
             if (Proxies == null) Proxies = new List<ProxyEntry>();
             if (ProxyApps == null) ProxyApps = new List<ProxyApp>();
             ProxyBridge.AssignPorts(Proxies);
@@ -446,7 +463,7 @@ namespace DPIKalkan
             }
             catch (Exception ex)
             {
-                try { File.Copy(FilePath, FilePath + ".bozuk", true); } catch { }
+                try { File.Copy(FilePath, FilePath + ".bozuk", true); } catch (Exception ign) { App.Ignored("Bozuk ayar dosyası yedeklenemedi", ign); }
                 App.Log("Ayar dosyası okunamadı, varsayılanlar kullanılıyor: " + ex.Message, LogLevel.Warn);
             }
             if (s == null) s = new AppSettings();
@@ -480,8 +497,19 @@ namespace DPIKalkan
             using (var fs = File.OpenRead(path)) s = (AppSettings)Ser.Deserialize(fs);
             s.Normalize();
             foreach (var p in s.CustomProfiles)
-                if ((p.RawArgs ?? "").Contains("--blacklist") || (p.ExtraArgs ?? "").Contains("--blacklist"))
-                    throw new InvalidDataException("Yedekteki '" + p.Name + "' profili güvenli olmayan bir parametre içeriyor.");
+            {
+                if (!ArgPolicy.ValidateProfile(p, out string argErr))
+                    throw new InvalidDataException("Yedekteki '" + ArgPolicy.CleanText(p.Name, 80) + "' profili güvenli olmayan ya da tanınmayan bir parametre içeriyor: " + argErr);
+                p.Name = ArgPolicy.CleanText(p.Name, 80);
+                p.Description = ArgPolicy.CleanText(p.Description, 600);
+            }
+            foreach (var a in s.ProxyApps)
+                if (CmdLine.HasControlChars(a.ExtraArgs) || CmdLine.HasControlChars(a.ExePath))
+                    throw new InvalidDataException("Yedekteki '" + ArgPolicy.CleanText(a.Name, 80) + "' program kuralı geçersiz karakter içeriyor.");
+            foreach (var b in s.DnsBackups)
+                foreach (var ip in (b.V4 ?? new List<string>()).Concat(b.V6 ?? new List<string>()))
+                    if (!System.Net.IPAddress.TryParse(ip ?? "", out _))
+                        throw new InvalidDataException("Yedekteki DNS adresi geçersiz: " + ArgPolicy.CleanText(ip, 60));
             return s;
         }
 

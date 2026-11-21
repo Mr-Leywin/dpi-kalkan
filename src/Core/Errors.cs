@@ -11,7 +11,7 @@ namespace DPIKalkan
     {
         None, RestartAsAdmin, OpenAppFolder, ResetAll, ResolveConflicts, FlushDns, FindBest, OpenProfiles,
         OpenDnsPage, TestDnsServers, StartBfe, OpenWindowsSecurity, RestartDiscord, StartProtection, OpenLog,
-        OpenSites, OpenProxySettings, OpenDateTime, DisableServiceMode, OpenHosts, SiteAnalysis, OpenSettings, OpenProxyPage
+        OpenSites, OpenProxySettings, OpenDateTime, DisableServiceMode, OpenHosts, SiteAnalysis, OpenSettings, OpenProxyPage, ReportFalsePositive
     }
 
     public sealed class ErrorInfo
@@ -49,6 +49,7 @@ namespace DPIKalkan
                 case FixKind.SiteAnalysis: return "Site analizi yap";
                 case FixKind.OpenSettings: return "Ayarlara git";
                 case FixKind.OpenProxyPage: return "Proxy sayfasına git";
+                case FixKind.ReportFalsePositive: return "Yanlış pozitif bildir";
                 default: return "";
             }
         }
@@ -63,6 +64,11 @@ namespace DPIKalkan
             "GoodbyeDPI", "Hizmet ve başlangıç", "Ağ bağlantısı", "Discord", "Proxy"
         };
 
+        // Antivirüs yanlış pozitif adımları: önce doğrulama ve bildirim, istisna yalnızca son çare
+        const string FpVerify = "Dosyaların resmi olduğunu doğrulayın: Sorun Giderme → Tam kontrol, 'Dosya bütünlüğü' satırında SHA-256 özetlerini resmi GoodbyeDPI 0.2.3rc3 sürümüyle karşılaştırır.";
+        const string FpReport = "Dosyayı Microsoft'a yanlış pozitif olarak bildirin ('Yanlış pozitif bildir' düğmesi → microsoft.com/wdsi/filesubmission); incelenip onaylanınca Defender uyarmayı bırakır.";
+        const string FpLastResort = "Son çare: yalnızca DPI Kalkan klasörünü (tüm diski ya da İndirilenler'i değil) antivirüs istisnalarına ekleyin";
+
         static ErrorInfo E(string code, string cat, Severity sev, string title, string summary,
                            string[] causes, string[] steps, FixKind fix = FixKind.None, FixKind fix2 = FixKind.None, string detect = "")
             => new ErrorInfo { Code = code, Category = cat, Severity = sev, Title = title, Summary = summary, Causes = causes, Steps = steps, Fix = fix, Fix2 = fix2, Detect = detect };
@@ -74,15 +80,15 @@ namespace DPIKalkan
               "DPI Kalkan ağ sürücüsünü (WinDivert) yükleyebilmek için yönetici olarak çalışmalıdır.",
               new[] { "Uygulama normal kullanıcı olarak açıldı.", "Windows'un 'Bu uygulamanın değişiklik yapmasına izin verilsin mi?' sorusuna 'Hayır' denildi." },
               new[] { "Uygulamayı kapatın.", "DPIKalkan.exe'ye sağ tıklayıp 'Yönetici olarak çalıştır'ı seçin.",
-                      "Ayarlar → 'Windows açılışında başlat'ı açarsanız sonraki açılışlarda izin sorulmadan yönetici olarak başlar." },
+                      "Kurulumlu sürümde Ayarlar → 'Windows açılışında başlat'ı açarsanız sonraki açılışlarda izin sorulmadan yönetici olarak başlar." },
               FixKind.RestartAsAdmin, detect: "Uygulama açılırken ve Sorun Bul taramasında kontrol edilir."),
             E("DK-102", "Uygulama ve yetki", Severity.Error, "GoodbyeDPI dosyaları eksik",
               "bin klasöründe goodbyedpi.exe, WinDivert.dll veya WinDivert64.sys bulunamadı.",
               new[] { "Antivirüs programı dosyaları karantinaya aldı ya da sildi.", "Zip dosyası tam olarak çıkarılmadı.", "Dosyalar elle taşındı veya silindi." },
               new[] { "Antivirüsün karantina listesine bakın; DPI Kalkan dosyalarını geri yükleyin.",
-                      "Antivirüste DPI Kalkan klasörünü istisnalara (dışlamalara) ekleyin.",
-                      "Zip dosyasını yeniden, tamamen bir klasöre çıkarın ve uygulamayı oradan çalıştırın." },
-              FixKind.OpenAppFolder, detect: "Koruma başlatılırken ve Sorun Bul taramasında dosyalar kontrol edilir."),
+                      FpReport, FpVerify,
+                      "Zip dosyasını yeniden, tamamen bir klasöre çıkarın (ya da kurulum paketini yeniden çalıştırın).", FpLastResort },
+              FixKind.OpenAppFolder, FixKind.ReportFalsePositive, detect: "Koruma başlatılırken ve Sorun Bul taramasında dosyalar kontrol edilir."),
             E("DK-103", "Uygulama ve yetki", Severity.Warning, "Uygulama geçici bir klasörden çalışıyor",
               "Uygulama zip dosyasının içinden ya da Temp klasöründen çalıştırılmış. Ayarlar kaybolabilir; arka plan hizmeti ve açılış görevi bozulur.",
               new[] { "Zip dosyası çift tıklanarak açıldı ve uygulama doğrudan içinden başlatıldı.", "Uygulama İndirilenler/Temp gibi geçici bir yerde duruyor." },
@@ -96,6 +102,18 @@ namespace DPIKalkan
                       "Windows Güvenliği → Virüs ve tehdit koruması → Fidye yazılımı koruması → Denetimli klasör erişimi'nde DPI Kalkan'a izin verin.",
                       "Diskte yer açın." },
               FixKind.OpenAppFolder, FixKind.OpenWindowsSecurity),
+            E("DK-105", "Uygulama ve yetki", Severity.Error, "GoodbyeDPI dosyaları doğrulanamadı",
+              "bin klasöründeki goodbyedpi.exe, WinDivert.dll ya da sürücü dosyası resmi GoodbyeDPI 0.2.3rc3 sürümüyle aynı değil (SHA-256). Güvenlik için koruma başlatılmadı.",
+              new[] { "Dosya indirme sırasında bozuldu.", "Bir program ya da kişi dosyayı değiştirdi.", "Antivirüs dosyayı 'temizlemeye' çalışıp bozdu." },
+              new[] { "DPI Kalkan'ı resmi sürüm sayfasından (GitHub) yeniden indirin ve yeni bir klasöre çıkarın.",
+                      "Kurulumlu sürümü kullanıyorsanız kurulumu onarın ya da yeniden kurun.",
+                      "Sorun sürerse günlükteki dosya adını ve özeti sorun bildirimine ekleyin." },
+              FixKind.OpenAppFolder, FixKind.OpenLog, detect: "Koruma her başlatıldığında dosyaların özeti programa gömülü resmi özetlerle karşılaştırılır."),
+            E("DK-106", "Uygulama ve yetki", Severity.Info, "Son kapanış beklenmedikti",
+              "DPI Kalkan geçen sefer düzgün kapanmadı. Uygulama modundaki koruma uygulamayla birlikte durmuş olabilir; şimdi yeniden başladı.",
+              new[] { "Uygulama bir hata nedeniyle çöktü.", "Görev Yöneticisi'nden ya da başka bir programla zorla kapatıldı.", "Elektrik kesildi ya da bilgisayar donup kapatıldı." },
+              new[] { "Bir şey yapmanız gerekmez; sık tekrarlanıyorsa günlüğü ve veri\\son-cokme.txt dosyasını sorun bildirimine ekleyin (Sorun Giderme → Destek paketi)." },
+              FixKind.OpenLog, detect: "Uygulama açılırken bir önceki çalışmanın düzgün kapanıp kapanmadığı denetlenir."),
 
             // ------------------------------------------------------------ 2xx sürücü
             E("DK-201", "Sürücü (WinDivert)", Severity.Error, "WinDivert sürücüsü yüklenemedi",
@@ -103,13 +121,13 @@ namespace DPIKalkan
               new[] { "Antivirüs programı sürücüyü engelliyor.", "Başka bir programın yüklediği farklı sürüm WinDivert sürücüsü bellekte kalmış.",
                       "Windows bekleyen bir güncelleme için yeniden başlatılmayı bekliyor." },
               new[] { "Sorun Giderme → 'Tümünü sıfırla' düğmesine basın.", "Bilgisayarı yeniden başlatın.",
-                      "Antivirüs programında DPI Kalkan klasörünü istisnalara ekleyin.", "Korumayı tekrar başlatın." },
+                      "Antivirüs engelliyorsa DK-204'teki adımları izleyin (önce yanlış pozitif bildirimi).", "Korumayı tekrar başlatın." },
               FixKind.ResetAll, FixKind.OpenLog, "GoodbyeDPI'ın 'Error opening filter' çıktısından algılanır."),
             E("DK-202", "Sürücü (WinDivert)", Severity.Error, "Sürücü dosyaları bulunamadı",
               "GoodbyeDPI, WinDivert.dll veya WinDivert64.sys dosyasını bulamadığını bildirdi.",
               new[] { "Antivirüs dosyayı sildi ya da karantinaya aldı.", "Paket eksik çıkarıldı." },
-              new[] { "Antivirüs karantinasından dosyaları geri yükleyin ve klasörü istisnaya ekleyin.", "Zip'i yeniden çıkarın." },
-              FixKind.OpenAppFolder, detect: "GoodbyeDPI çıktısındaki 'were not found' ifadesinden algılanır."),
+              new[] { "Antivirüs karantinasından dosyaları geri yükleyin.", FpReport, FpVerify, "Zip'i yeniden çıkarın.", FpLastResort },
+              FixKind.OpenAppFolder, FixKind.ReportFalsePositive, detect: "GoodbyeDPI çıktısındaki 'were not found' ifadesinden algılanır."),
             E("DK-203", "Sürücü (WinDivert)", Severity.Error, "Sürücü imzası doğrulanamadı",
               "Windows, WinDivert sürücüsünün dijital imzasını kabul etmedi.",
               new[] { "Windows çok eski ve SHA-2 imzalarını desteklemiyor.", "Sürücü dosyası bozulmuş.", "Sürücü imza zorlaması ayarlarıyla oynanmış." },
@@ -118,11 +136,11 @@ namespace DPIKalkan
             E("DK-204", "Sürücü (WinDivert)", Severity.Error, "Sürücü güvenlik yazılımı tarafından engellendi",
               "Antivirüs programınız WinDivert sürücüsünün yüklenmesini engelledi. WinDivert bir virüs değildir; ağ paketlerini işlediği için 'RiskTool' olarak işaretlenir.",
               new[] { "Kaspersky, Norton, ESET, Bitdefender, Avast/AVG gibi antivirüsler WinDivert'i engelleyebilir." },
-              new[] { "Antivirüs programınızı açın.",
-                      "Kaspersky: Ayarlar → Tehditler ve İstisnalar → İstisnaları yönet → Ekle → DPI Kalkan klasörü.",
-                      "Norton: Ayarlar → Antivirüs → Taramalar ve Riskler → Taramalardan Dışlanacak Öğeler → DPI Kalkan klasörü.",
-                      "Karantinaya alınan dosya varsa geri yükleyin.", "Korumayı yeniden başlatın." },
-              FixKind.OpenAppFolder, FixKind.OpenWindowsSecurity, "GoodbyeDPI çıktısındaki 'blocked by security software' ifadesinden algılanır."),
+              new[] { FpVerify, FpReport,
+                      "Diğer antivirüsler (Kaspersky, Norton, ESET…) için de üreticinin 'yanlış pozitif bildir' sayfasını kullanın.",
+                      "Karantinaya alınan dosya varsa geri yükleyin ve korumayı yeniden başlatın.",
+                      FpLastResort + " (Kaspersky: Ayarlar → Tehditler ve İstisnalar → İstisnaları yönet; Norton: Taramalardan Dışlanacak Öğeler.)" },
+              FixKind.ReportFalsePositive, FixKind.OpenWindowsSecurity, "GoodbyeDPI çıktısındaki 'blocked by security software' ifadesinden algılanır."),
             E("DK-205", "Sürücü (WinDivert)", Severity.Error, "Temel Filtreleme Altyapısı (BFE) kapalı",
               "WinDivert'in çalışması için gereken 'Base Filtering Engine' Windows hizmeti çalışmıyor.",
               new[] { "Hizmet bir optimizasyon programı ya da kullanıcı tarafından devre dışı bırakıldı." },
@@ -136,10 +154,10 @@ namespace DPIKalkan
               new[] { "WinDivert kullanan diğer programları kapatın.", "'Tümünü sıfırla' düğmesine basın.", "Bilgisayarı yeniden başlatın." },
               FixKind.ResetAll, detect: "GoodbyeDPI çıktısındaki 'incompatible version' ifadesinden algılanır."),
             E("DK-207", "Sürücü (WinDivert)", Severity.Info, "Antivirüs programı tespit edildi",
-              "Bilgisayarınızda üçüncü taraf bir antivirüs var. Koruma sorunsuz çalışıyorsa bir şey yapmanıza gerek yok; sürücü hatası alırsanız istisna ekleyin.",
+              "Bilgisayarınızda üçüncü taraf bir antivirüs var. Koruma sorunsuz çalışıyorsa bir şey yapmanıza gerek yok; sürücü hatası alırsanız DK-204'teki adımları izleyin.",
               new[] { "Bazı antivirüsler WinDivert'i haber vermeden engeller ya da GoodbyeDPI'ı sonlandırır." },
-              new[] { "DPI Kalkan klasörünü antivirüs istisnalarına ekleyin.", "Antivirüsün 'şifreli bağlantıları tara' (HTTPS tarama) özelliği sertifika hatalarına yol açıyorsa kapatın." },
-              FixKind.OpenAppFolder, detect: "Sorun Bul taramasında Windows Güvenlik Merkezi'nden okunur."),
+              new[] { "Engelleme olursa önce dosyayı yanlış pozitif olarak bildirin (DK-204).", "Antivirüsün 'şifreli bağlantıları tara' (HTTPS tarama) özelliği sertifika hatalarına yol açıyorsa kapatın." },
+              FixKind.ReportFalsePositive, detect: "Sorun Bul taramasında Windows Güvenlik Merkezi'nden okunur."),
 
             // ------------------------------------------------------------ 3xx çakışma
             E("DK-301", "Çakışma", Severity.Warning, "Başka bir GoodbyeDPI çalışıyor",
@@ -243,7 +261,7 @@ namespace DPIKalkan
             E("DK-602", "GoodbyeDPI", Severity.Error, "GoodbyeDPI beklenmedik şekilde kapandı",
               "Koruma çalışırken GoodbyeDPI işlemi kapandı.",
               new[] { "Antivirüs programı işlemi sonlandırdı.", "Bilgisayar uykudan uyanırken sürücü sıfırlandı.", "Görev Yöneticisi'nden kapatıldı." },
-              new[] { "Ayarlar'da 'Kapanırsa otomatik yeniden başlat' açık olsun.", "DPI Kalkan klasörünü antivirüs istisnalarına ekleyin.", "Korumayı yeniden başlatın." },
+              new[] { "Ayarlar'da 'Kapanırsa otomatik yeniden başlat' açık olsun.", "Antivirüs kapatıyorsa dosyayı yanlış pozitif olarak bildirin (DK-204).", "Korumayı yeniden başlatın." },
               FixKind.StartProtection, FixKind.OpenLog),
             E("DK-603", "GoodbyeDPI", Severity.Error, "Geçersiz profil parametresi",
               "GoodbyeDPI profildeki bir parametreyi tanımadı.",
@@ -255,6 +273,12 @@ namespace DPIKalkan
               new[] { "Bilgisayar çok yoğun ya da konsol çıktısı geç geldi." },
               new[] { "Bağlantı testi başarılıysa bir şey yapmanıza gerek yok." },
               FixKind.OpenLog),
+            E("DK-605", "GoodbyeDPI", Severity.Error, "Profilde güvenli olmayan parametre",
+              "Seçili profil GoodbyeDPI'ın tanımadığı, kısaltılmış ya da güvenli olmayan bir parametre içeriyor; koruma bu profille başlatılmadı.",
+              new[] { "Profil başkasından gelen bir kodla ya da ayar dosyasıyla eklendi.", "Özel parametreler elle yanlış yazıldı (ör. '--black' gibi kısaltma).",
+                      "Parametrelerde komut satırı karakterleri (& | % \" …) var." },
+              new[] { "Profiller sayfasında profili düzenleyin; seçenekleri tam adıyla ve ayrı ayrı yazın.", "Ya da hazır profillerden birini seçin." },
+              FixKind.OpenProfiles, detect: "Koruma başlatılırken ve profil kodu/ayar dosyası içe aktarılırken parametreler beyaz listeyle denetlenir."),
 
             // ------------------------------------------------------------ 7xx hizmet
             E("DK-701", "Hizmet ve başlangıç", Severity.Error, "Arka plan hizmeti kurulamadı",
@@ -277,6 +301,13 @@ namespace DPIKalkan
               new[] { "Uygulama klasörü taşındı ya da yeni sürüm farklı bir klasöre çıkarıldı." },
               new[] { "'Korumayı yeniden başlat' düğmesine basın; hizmet yeni klasörü gösterecek şekilde güncellenir." },
               FixKind.StartProtection),
+            E("DK-705", "Hizmet ve başlangıç", Severity.Warning, "Taşınabilir sürümde hizmet ve açılış görevi kapalı",
+              "Arka plan hizmeti (SYSTEM yetkisi) ve 'Windows açılışında başlat' (izin sormadan yönetici yetkisi) yalnızca yönetici korumalı bir klasöre kurulan sürümde kullanılabilir. " +
+              "Herkesin yazabildiği bir klasörden (Masaüstü, İndirilenler…) bu yetkilerle çalışmak, bilgisayardaki zararlı bir programın yetki kazanmasına yol açabilir.",
+              new[] { "Uygulama zip'ten çıkarılan taşınabilir bir klasörden çalışıyor.", "Önceki sürümde açılan hizmet/görev güvenlik nedeniyle kaldırıldı." },
+              new[] { "Koruma uygulama modunda normal çalışır; uygulama açık (tepside) kaldığı sürece bir şey yapmanız gerekmez.",
+                      "Açılışta otomatik başlaması için DPI Kalkan'ı kurulum paketiyle kurun (Program Files)." },
+              FixKind.OpenSettings, detect: "Uygulama açılırken klasör izinleri ve kurulu hizmet/görevin gösterdiği klasör denetlenir."),
 
             // ------------------------------------------------------------ 8xx ağ
             E("DK-801", "Ağ bağlantısı", Severity.Error, "İnternet bağlantısı yok",

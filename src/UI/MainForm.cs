@@ -487,6 +487,7 @@ namespace DPIKalkan
                 exiting = true;
                 tray.Visible = false;
                 if (!App.Engine.RunningAsService) App.Engine.Stop(true);
+                CrashMarker.End();   // Windows kapanırken işlem zorla sonlanabilir; düzgün kapanış sayılır
             }
             base.OnFormClosing(e);
         }
@@ -507,6 +508,7 @@ namespace DPIKalkan
             if (!App.Engine.RunningAsService) App.Engine.Stop();
             ProxyBridge.StopAll();
             App.Log("Uygulama kapatıldı.", LogLevel.Info);
+            CrashMarker.End();
             Application.Exit();
         }
 
@@ -520,6 +522,13 @@ namespace DPIKalkan
                 ShowBalloon("DPI Kalkan güncellendi", "Sürüm " + updatedFrom + " → " + App.Version + ". Ayarlarınız korundu.", ToolTipIcon.Info, force: true);
                 History.Add(new HistoryEntry { Time = DateTime.Now, Kind = "güncelleme", Profile = App.Version, Ok = 1, Total = 1, Running = true, Note = updatedFrom + " → " + App.Version });
                 _ = Task.Delay(15000).ContinueWith(_ => Updater.Cleanup());
+            }
+            if (CrashMarker.PreviousUnexpected != null && updatedFrom == null)
+            {
+                App.Problems.Report("DK-106", CrashMarker.PreviousUnexpected);
+                ShowBalloon("Son kapanış beklenmedikti",
+                    "DPI Kalkan geçen sefer düzgün kapanmadı (çökme, zorla kapatma ya da elektrik kesintisi). Ayrıntı: Sorun Giderme → DK-106 ya da günlük.",
+                    ToolTipIcon.Warning, force: true);
             }
             if (updateFailed)
             {
@@ -540,7 +549,18 @@ namespace DPIKalkan
                 App.Log("[DK-103] Uygulama geçici bir klasörden çalışıyor: " + App.BaseDir, LogLevel.Warn);
             }
 
-            if (App.Settings.StartWithWindows)
+            // Hizmet ve açılış görevi yalnızca korumalı (kurulumlu) klasörden çalışabilir
+            bool protectedInstall = await Task.Run(() => InstallGuard.Evaluate(true));
+            string removed = "";
+            bool serviceWasRunning = await Task.Run(() => Uninstaller.EnforceLocationRules(protectedInstall, out removed));
+            if (removed.Length > 0)
+            {
+                App.Problems.Report("DK-705", removed);
+                ShowBalloon("Güvenlik için kapatıldı: " + (removed.Contains(" ve ") ? "hizmet ve görev" : removed),
+                    "Taşınabilir klasörden yönetici/SYSTEM yetkisiyle otomatik çalışmak güvenli değil. Koruma uygulama modunda sürüyor; açılışta başlaması için kurulumlu sürümü kullanın.",
+                    ToolTipIcon.Warning, force: true);
+            }
+            if (protectedInstall && App.Settings.StartWithWindows)
                 _ = Task.Run(() =>
                 {
                     if (!Startup.Enable(out string err))
@@ -566,7 +586,7 @@ namespace DPIKalkan
                 ScanDialog.Run(this, autoStart: true, full: scanAll);
             }
             else if (repointed) { }
-            else if ((App.Settings.AutoStartProtection || resume) && App.Engine.State != EngineState.Running)
+            else if ((App.Settings.AutoStartProtection || resume || serviceWasRunning) && App.Engine.State != EngineState.Running)
             {
                 if (App.Engine.ExternalCount > 0)
                     App.Log("Uygulama dışında çalışan GoodbyeDPI bulundu; devralınıyor.", LogLevel.Warn);

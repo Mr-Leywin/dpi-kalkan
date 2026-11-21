@@ -128,7 +128,7 @@ namespace DPIKalkan
             try
             {
                 status.Text = "İndiriliyor…";
-                string zip = await Task.Run(() => Updater.Download(info, (got, total) =>
+                Action<long, long> progress = (got, total) =>
                 {
                     try
                     {
@@ -139,14 +139,16 @@ namespace DPIKalkan
                             status.Text = "İndiriliyor… " + (got / 1024) + " / " + (total / 1024) + " KB";
                         }));
                     }
-                    catch { }
-                }, cts.Token));
-                status.Text = "Doğrulandı (SHA-256). Paket açılıyor…";
-                string root = await Task.Run(() => Updater.Extract(zip, info.Version));
-                status.Text = "Kuruluyor… Uygulama birkaç saniye içinde yeniden açılacak.";
+                    catch (Exception ex) { App.Ignored("İlerleme gösterilemedi", ex); }
+                };
+                // Kurulumlu sürüm kurulum paketiyle güncellenir (Program Ekle/Kaldır kaydı güncel kalır); taşınabilir sürüm zip ile
+                bool viaSetup = Updater.UseSetup(info, await Task.Run(() => Updater.InstalledMode));
+                var prep = viaSetup ? await Task.Run(() => Updater.DownloadSetup(info, progress, cts.Token))
+                                    : await Task.Run(() => Updater.DownloadAndExtract(info, progress, cts.Token));
+                status.Text = "Doğrulandı (SHA-256). Kuruluyor… Uygulama birkaç saniye içinde yeniden açılacak.";
                 status.ForeColor = GreenText;
                 await Task.Delay(600);
-                Updater.StartApply(root);
+                if (viaSetup) Updater.StartSetup(prep); else Updater.StartApply(prep);
                 busy = false;
                 MainForm.Instance.ExitApp(false);
             }

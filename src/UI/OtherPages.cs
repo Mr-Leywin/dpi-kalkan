@@ -148,13 +148,15 @@ namespace DPIKalkan
 
             // ------------------------------------------------ başlangıç
             Section("BAŞLANGIÇ", Level(UiLevel.Orta) ? 3 : 2);
+            bool portable = InstallGuard.IsPortable;
+            const string onlyInstalled = "Taşınabilir (zip) sürümde güvenlik nedeniyle kapalı; kurulum paketiyle Program Files'a kurulan sürümde kullanılabilir.";
             rStartWin = Row("Windows açılışında uygulamayı başlat",
-                "Oturum açınca DPI Kalkan sistem tepsisinde, yönetici izni sormadan başlar.", () => App.Settings.StartWithWindows);
+                portable ? onlyInstalled : "Oturum açınca DPI Kalkan sistem tepsisinde, yönetici izni sormadan başlar.", () => App.Settings.StartWithWindows);
             Row("Uygulama açılınca korumayı otomatik başlat", "Seçili yöntemle koruma hemen devreye girer.",
                 () => App.Settings.AutoStartProtection, v => App.Settings.AutoStartProtection = v);
             if (Level(UiLevel.Orta))
                 rService = Row("Arka plan hizmeti modu",
-                    "GoodbyeDPI Windows hizmeti olarak kurulur: oturum açılmadan başlar, uygulama kapalıyken de çalışır.", () => App.Settings.ServiceMode);
+                    portable ? onlyInstalled : "GoodbyeDPI Windows hizmeti olarak kurulur: oturum açılmadan başlar, uygulama kapalıyken de çalışır.", () => App.Settings.ServiceMode);
             End();
 
             // ------------------------------------------------ pencere
@@ -196,17 +198,39 @@ namespace DPIKalkan
             End();
 
             // ------------------------------------------------ onarım
-            Caption("ONARIM");
-            var c4 = new Card { Bounds = R(28, y, 764, 150) };
+            Caption("ONARIM VE KALDIRMA");
+            var c4 = new Card { Bounds = R(28, y, 764, 206) };
             scroll.Controls.Add(c4);
-            y += 150 + 22;
+            y += 206 + 22;
             c4.Add(UIx.L("Sorun yaşıyorsanız önce Sorun Giderme → 'Tam kontrolü başlat'ı deneyin. 'Tümünü sıfırla', eski .cmd betiklerinin kurduğu " +
                          "GoodbyeDPI hizmetini ve WinDivert sürücüsünü de kaldırır (eski ayarlari_sifirla.cmd'nin daha kapsamlısı).",
                 Small, Muted, 20, 14, 724, 40));
             var bFlush = c4.Add(new FlatBtn { Text = "DNS önbelleğini temizle", Glyph = GRefresh, Kind = FlatBtn.Kinds.Secondary, Bounds = R(20, 62, 228, 38) });
             var bKill = c4.Add(new FlatBtn { Text = "Çakışmaları gider", Glyph = GWrench, Kind = FlatBtn.Kinds.Secondary, Bounds = R(258, 62, 228, 38) });
             var bReset = c4.Add(new FlatBtn { Text = "Tümünü sıfırla", Glyph = GDelete, Kind = FlatBtn.Kinds.Danger, Bounds = R(496, 62, 228, 38) });
-            var info = c4.Add(UIx.L("", Small, Muted, 20, 108, 724, 34));
+            var bClean = c4.Add(new FlatBtn { Text = "Temiz kaldır…", Glyph = GDelete, Kind = FlatBtn.Kinds.Danger, Bounds = R(20, 110, 228, 38) });
+            c4.Add(UIx.L("Hizmet, açılış görevi, WinDivert kaydı, Windows proxy ve DNS değişikliklerini geri alır; program klasörünü silmeden önce kullanın.",
+                Small, Muted, 258, 110, 486, 40));
+            var info = c4.Add(UIx.L("", Small, Muted, 20, 158, 724, 40));
+            bClean.Click += async (s, e) =>
+            {
+                if (MessageBox.Show(FindForm(),
+                        "DPI Kalkan'ın Windows'ta yaptığı tüm değişiklikler geri alınacak:\n\n" +
+                        "• Koruma durur; arka plan hizmeti ve WinDivert sürücü kaydı kaldırılır\n" +
+                        "• Windows açılış görevi silinir\n" +
+                        "• DPI Kalkan'ın ayarladığı Windows proxy'si ve DNS sunucuları eski hâline döner\n\n" +
+                        "Program klasörü ve ayarlarınız silinmez. Devam edilsin mi?",
+                        App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                bClean.Enabled = false;
+                string rep = await Task.Run(() => Uninstaller.Run());
+                if (IsDisposed) return;
+                LoadValues();
+                bClean.Enabled = true;
+                info.Text = "Temiz kaldırma tamamlandı.";
+                if (MessageBox.Show(FindForm(), "Geri alınanlar:\n\n" + rep + "\n\nArtık uygulamadan çıkıp program klasörünü silebilirsiniz. Uygulamadan çıkılsın mı?",
+                        App.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                    MainForm.Instance.ExitApp(false);
+            };
             bFlush.Click += async (s, e) => info.Text = await Fixes.Run(FixKind.FlushDns, FindForm());
             bKill.Click += async (s, e) => { bKill.Enabled = false; info.Text = await Fixes.Run(FixKind.ResolveConflicts, FindForm()); bKill.Enabled = true; };
             bReset.Click += async (s, e) =>
@@ -282,6 +306,8 @@ namespace DPIKalkan
                         bool wasActive = App.Engine.IsActive;
                         // bu bilgisayara özgü durumlar korunur
                         imported.DnsBackups = App.Settings.DnsBackups;
+                        imported.DohBackups = App.Settings.DohBackups;
+                        imported.GlobalDohBackup = App.Settings.GlobalDohBackup;
                         imported.SystemProxyBackup = App.Settings.SystemProxyBackup;
                         imported.SystemProxyId = App.Settings.SystemProxyId;
                         imported.ServiceMode = App.Settings.ServiceMode;
@@ -320,11 +346,14 @@ namespace DPIKalkan
                             string dir = Path.Combine(d.SelectedPath, "DPI Kalkan betikleri");
                             Directory.CreateDirectory(dir);
                             string binRoot = Path.GetDirectoryName(Engine.BinDir);
-                            int i = 0;
+                            int i = 0, skipped = 0;
                             foreach (var p in App.AllProfiles.OrderBy(x => x.Priority))
-                                Scripts.Write(p, Path.Combine(dir, (++i).ToString("00") + "_" + Scripts.Slug(p.Name) + ".cmd"), binRoot);
+                            {
+                                try { Scripts.Write(p, Path.Combine(dir, (i + 1).ToString("00") + "_" + Scripts.Slug(p.Name) + ".cmd"), binRoot); i++; }
+                                catch (InvalidDataException ex) { skipped++; App.Log(ex.Message, LogLevel.Warn); }
+                            }
                             Sys.OpenFolder(dir);
-                            App.Log(i + " betik dışa aktarıldı: " + dir, LogLevel.Success);
+                            App.Log(i + " betik dışa aktarıldı: " + dir + (skipped > 0 ? " (" + skipped + " profil güvenli olmadığı için atlandı)" : ""), LogLevel.Success);
                         }
                         catch (Exception ex) { MessageBox.Show(FindForm(), "Dışa aktarılamadı: " + ex.Message, App.Name); }
                     }
@@ -395,6 +424,12 @@ namespace DPIKalkan
             rStartWin.Switch.CheckedChanged += async (s, e) =>
             {
                 bool want = rStartWin.Switch.Checked;
+                if (want && InstallGuard.IsPortable)
+                {
+                    MessageBox.Show(FindForm(), InstallGuard.NeedInstall + "\n\nAyrıntı: " + InstallGuard.Reason, App.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    rStartWin.Switch.SetSilently(false);
+                    return;
+                }
                 if (want && App.RunningFromTemp)
                 {
                     MessageBox.Show(FindForm(), "Uygulama geçici bir klasörden çalışıyor (DK-103). Önce zip'i kalıcı bir klasöre çıkarın, sonra bu seçeneği açın.",
@@ -428,6 +463,12 @@ namespace DPIKalkan
             rService.Switch.CheckedChanged += async (s, e) =>
             {
                 bool want = rService.Switch.Checked;
+                if (want && InstallGuard.IsPortable)
+                {
+                    MessageBox.Show(FindForm(), InstallGuard.NeedInstall + "\n\nAyrıntı: " + InstallGuard.Reason, App.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    rService.Switch.SetSilently(false);
+                    return;
+                }
                 if (want && MessageBox.Show(FindForm(),
                         "GoodbyeDPI 'DPI Kalkan' adıyla Windows hizmeti olarak kurulacak ve bilgisayar açılınca otomatik başlayacak.\n\n" +
                         "Uygulamayı kapatsanız bile koruma çalışmaya devam eder. Koruma şimdi bu modda yeniden başlatılsın mı?",
@@ -509,6 +550,15 @@ namespace DPIKalkan
             var c2 = AddCard(28, 292, 764, 336);
             var r = c2.Add(new ReportBox { Bounds = R(20, 14, 724, 310) });
             r.BackColor = Theme.Card;
+            r.Out("2.4'TE YENİ", Muted, Theme.Caption);
+            foreach (var line in new[]
+            {
+                "Kurulum paketi: Program Files'a kurulur, kurulum paketiyle sessizce güncellenir. Arka plan hizmeti ve Windows açılışında başlatma güvenlik gereği yalnızca kurulumlu sürümde; taşınabilir zip uygulama modunda çalışır.",
+                "Güvenlik: GoodbyeDPI/WinDivert dosyaları her başlatmada SHA-256 ile doğrulanır, profil parametreleri güvenli listeden geçer, güncellemeler daha sıkı denetlenir.",
+                "Şifreli DNS sonucu her sunucu için doğrulanır ve geri alınabilir. Temiz kaldırma (Ayarlar → Temiz kaldır), beklenmedik kapanış bildirimi, 'Yanlış pozitif bildir' düğmesi.",
+            })
+                r.Out("•  " + line, Theme.Text, Small);
+            r.Blank();
             r.Out("2.3'TE YENİ", Muted, Theme.Caption);
             foreach (var line in new[]
             {
@@ -554,7 +604,11 @@ namespace DPIKalkan
                 Theme.Text, Small);
             r.Blank();
             r.Out("Antivirüs uyarısı: WinDivert bir ağ sürücüsüdür; bazı antivirüsler (Kaspersky, Norton…) onu 'RiskTool' olarak işaretleyebilir. Bu bir virüs değildir; " +
-                  "uygulama klasörünü istisnalara ekleyebilirsiniz (DK-204).", Theme.Text, Small);
+                  "dosyaların resmi olduğunu Sorun Giderme → Tam kontrol doğrular; uyarı alırsanız önce Microsoft'a yanlış pozitif olarak bildirin (DK-204).", Theme.Text, Small);
+            r.Blank();
+            r.Out("LİSANS", Muted, Theme.Caption);
+            r.Out("DPI Kalkan · " + App.Copyright + " · MIT Lisansı", Theme.Text, Small);
+            r.Out("Birlikte dağıtılan bileşenler kendi lisanslarına tabidir: GoodbyeDPI © ValdikSS (Apache 2.0), WinDivert © basil00 (LGPLv3). Metinler: Lisanslar düğmesi.", Theme.Text, Small);
             r.Blank();
             r.Out("Teşekkürler: GoodbyeDPI – ValdikSS (Apache 2.0) · WinDivert – basil00 (LGPLv3) · uthash, getline.", Muted, Small);
             r.SelectionStart = 0;

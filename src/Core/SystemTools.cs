@@ -11,7 +11,7 @@ using Microsoft.Win32;
 
 namespace DPIKalkan
 {
-    /// <summary>Komut satırı araçlarını (netsh, sc, powershell) pencere açmadan çalıştırır.</summary>
+    /// <summary>Windows'un kendi komut satırı araçlarını (netsh, sc) System32'den, pencere açmadan çalıştırır.</summary>
     public static class Sys
     {
         static Encoding Oem
@@ -23,6 +23,10 @@ namespace DPIKalkan
             }
         }
 
+        /// <summary>
+        /// Programı pencere açmadan çalıştırır; çıktıyı eşzamansız okur (tampon dolup kilitlenmez) ve süre dolarsa
+        /// işlemi sonlandırır. Dönüş: (çıkış kodu, çıktı); -1 başlatılamadı, -2 zaman aşımı.
+        /// </summary>
         public static (int Code, string Output) Run(string file, string args, int timeoutMs = 20000)
         {
             try
@@ -32,15 +36,24 @@ namespace DPIKalkan
                     UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardOutput = true, RedirectStandardError = true,
                     StandardOutputEncoding = Oem, StandardErrorEncoding = Oem,
+                    WorkingDirectory = Environment.SystemDirectory,
                 };
                 using (var p = Process.Start(psi))
                 {
-                    var err = p.StandardError.ReadToEndAsync();
-                    string o = p.StandardOutput.ReadToEnd();
-                    if (!p.WaitForExit(timeoutMs)) { try { p.Kill(); } catch { } return (-2, "zaman aşımı"); }
-                    o += err.Result;
+                    var o = p.StandardOutput.ReadToEndAsync();
+                    var e = p.StandardError.ReadToEndAsync();
+                    if (!p.WaitForExit(timeoutMs))
+                    {
+                        try { p.Kill(); } catch { }
+                        try { p.WaitForExit(3000); } catch { }
+                        App.Log(Path.GetFileName(file) + " " + args + " → " + (timeoutMs / 1000) + " sn içinde bitmedi, sonlandırıldı.", LogLevel.Warn);
+                        return (-2, "zaman aşımı");
+                    }
+                    // akışlar alt işlemler tarafından açık tutulursa en fazla 5 sn bekle
+                    string text = System.Threading.Tasks.Task.WaitAll(new System.Threading.Tasks.Task[] { o, e }, 5000) ? o.Result + e.Result
+                                : (o.IsCompleted ? o.Result : "") + (e.IsCompleted ? e.Result : "");
                     App.Log(Path.GetFileName(file) + " " + args + " → " + p.ExitCode, LogLevel.Debug);
-                    return (p.ExitCode, o.Trim());
+                    return (p.ExitCode, text.Trim());
                 }
             }
             catch (Exception ex) { return (-1, ex.Message); }
@@ -48,17 +61,12 @@ namespace DPIKalkan
 
         public static string SystemExe(string name) => Path.Combine(Environment.SystemDirectory, name);
 
-        public static (int Code, string Output) PowerShell(string script, int timeoutMs = 30000) =>
-            Run(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),
-                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script.Replace("\"", "\\\"") + "\"", timeoutMs);
-
         /// <summary>Yükseltilmiş süreçten, programı normal kullanıcı yetkisiyle açar (explorer üzerinden).</summary>
         public static bool OpenAsUser(string path)
         {
             try
             {
-                Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), "\"" + path + "\"")
-                { UseShellExecute = false });
+                Process.Start(new ProcessStartInfo(Explorer, "\"" + path + "\"") { UseShellExecute = false });
                 return true;
             }
             catch { return false; }
@@ -66,17 +74,19 @@ namespace DPIKalkan
 
         public static void OpenUri(string uri)
         {
-            try { Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true }); } catch { }
+            try { Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true }); } catch (Exception ign) { App.Ignored("Adres açılamadı", ign); }
         }
+
+        static string Explorer => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
 
         public static void OpenFolder(string dir)
         {
-            try { Process.Start("explorer.exe", "\"" + dir + "\""); } catch { }
+            try { Process.Start(new ProcessStartInfo(Explorer, "\"" + dir + "\"") { UseShellExecute = false }); } catch (Exception ign) { App.Ignored("Klasör açılamadı", ign); }
         }
 
         public static void SelectFile(string file)
         {
-            try { Process.Start("explorer.exe", "/select,\"" + file + "\""); } catch { }
+            try { Process.Start(new ProcessStartInfo(Explorer, "/select,\"" + file + "\"") { UseShellExecute = false }); } catch (Exception ign) { App.Ignored("Dosya gösterilemedi", ign); }
         }
     }
 
@@ -138,7 +148,7 @@ namespace DPIKalkan
             foreach (var p in procs)
                 using (p)
                 {
-                    try { if (!p.HasExited) p.Kill(); } catch { }
+                    try { if (!p.HasExited) p.Kill(); } catch (Exception ign) { App.Ignored("Discord kapatılamadı", ign); }
                 }
             foreach (var p in Processes()) using (p) { try { p.WaitForExit(4000); } catch { } }
             Thread.Sleep(800);
@@ -194,8 +204,89 @@ namespace DPIKalkan
                 Doh = "https://doh.opendns.com/dns-query", Note = "Cisco'nun DNS hizmeti." },
         };
 
-        /// <summary>Windows 11 (derleme 22000+) şifreli DNS'i (DoH) destekler.</summary>
-        public static bool DohSupported => WindowsBuild >= 22000;
+        /// <summary>Windows 11 (derleme 22000+) şifreli DNS'i (DoH) ve 'netsh dns ... encryption' komutlarını destekler.</summary>
+        public static bool DohSupported => DohSupportedOn(WindowsBuild);
+        public static bool DohSupportedOn(int build) => build >= 22000;
+
+        public static string DohUnsupportedMessage(int build) =>
+            "Şifreli DNS (DoH) bu Windows sürümünde desteklenmiyor (derleme " + build + "; Windows 11 gerekir). " +
+            "DNS sunucusu şifresiz olarak ayarlandı; Discord erişimi için bu da yeterlidir.";
+
+        /// <summary>netsh komut satırına girebilecek güvenli bir DoH şablonu mu (https, boşluksuz, komut karakteri yok).</summary>
+        internal static bool SafeTemplate(string t) =>
+            !string.IsNullOrEmpty(t) && Uri.TryCreate(t, UriKind.Absolute, out var u) && u.Scheme == "https" && CmdLine.BareSafe(t) && !t.Contains(" ") && !t.Contains("\"");
+
+        /// <summary>
+        /// Bir DNS seçeneği için netsh komutları. Windows 11'de bilinen sunucular (1.1.1.1, 8.8.8.8, 9.9.9.9…) zaten kayıtlıdır
+        /// (Auto-upgrade: no): kayıt varsa 'set', yoksa 'add' kullanılır (bu makinede canlı denendi: ikisi de çıkış kodu 0 ile
+        /// Auto-upgrade'i yes yapar; 'delete' kaydı siler). Sonuç her zaman 'show encryption' ile okunup doğrulanır.
+        /// </summary>
+        internal static List<(string Ip, string Add, string Set)> DohCommands(SystemDnsChoice c)
+        {
+            var list = new List<(string, string, string)>();
+            if (!SafeTemplate(c.Doh)) return list;
+            foreach (var ip in new[] { c.V4a, c.V4b, c.V6a, c.V6b })
+            {
+                if (string.IsNullOrEmpty(ip) || !IPAddress.TryParse(ip, out _)) continue;
+                string tail = " dohtemplate=" + c.Doh + " autoupgrade=yes udpfallback=no";
+                list.Add((ip, "dns add encryption server=" + ip + tail, "dns set encryption server=" + ip + tail));
+            }
+            return list;
+        }
+
+        /// <summary>'netsh dns show encryption server=…' çıktısından okunan kayıt.</summary>
+        internal sealed class DohEntry
+        {
+            public bool Exists;
+            public string Template = "";
+            public bool? AutoUpgrade, UdpFallback;
+        }
+
+        static bool? YesNo(string v)
+        {
+            v = (v ?? "").Trim().ToLowerInvariant();
+            if (v == "yes" || v == "evet" || v == "enabled" || v == "etkin" || v == "açık") return true;
+            if (v == "no" || v == "hayır" || v == "hayir" || v == "disabled" || v == "devre dışı" || v == "kapalı") return false;
+            return null;
+        }
+
+        /// <summary>Tek bir sunucunun şifreleme kaydını ayrıştırır (kayıt yoksa netsh boş çıktı verir).</summary>
+        internal static DohEntry ParseEncryption(string output)
+        {
+            var e = new DohEntry();
+            foreach (var raw in (output ?? "").Split('\n'))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(raw.Trim(), @"^(.+?)\s+:\s*(.*)$");
+                if (!m.Success) continue;
+                string key = m.Groups[1].Value.ToLowerInvariant(), val = m.Groups[2].Value.Trim();
+                e.Exists = true;
+                if (val.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) e.Template = val;
+                else if (key.Contains("upgrade") || key.Contains("yükselt")) e.AutoUpgrade = YesNo(val);
+                else if (key.Contains("fallback") || key.Contains("geri")) e.UdpFallback = YesNo(val);
+            }
+            return e;
+        }
+
+        static DohEntry QueryDoh(string netsh, string ip) => ParseEncryption(Sys.Run(netsh, "dns show encryption server=" + ip).Output);
+
+        /// <summary>'netsh dns show global' çıktısındaki DoH değeri (enabled/disabled/auto; okunamazsa null).</summary>
+        internal static string ParseGlobalDoh(string output)
+        {
+            foreach (var raw in (output ?? "").Split('\n'))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(raw.Trim(), @"^DoH[^:]*:\s*(\S+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (m.Success) return m.Groups[1].Value.ToLowerInvariant();
+            }
+            return null;
+        }
+
+        static string Short(string s)
+        {
+            s = (s ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+            return s.Length > 160 ? s.Substring(0, 160) + "…" : s;
+        }
+
+        static string Fmt(bool? b) => b == null ? "okunamadı" : b.Value ? "yes" : "no";
 
         /// <summary>Gerçek Windows derleme numarası (uyumluluk katmanından etkilenmez).</summary>
         public static int WindowsBuild
@@ -207,7 +298,7 @@ namespace DPIKalkan
                     using (var k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
                         if (int.TryParse(k?.GetValue("CurrentBuildNumber") as string, out int b)) return b;
                 }
-                catch { }
+                catch (Exception ign) { App.Ignored("Windows derleme numarası okunamadı", ign); }
                 return Environment.OSVersion.Version.Build;
             }
         }
@@ -256,6 +347,20 @@ namespace DPIKalkan
         {
             string fam = v6 ? "ipv6" : "ipv4";
             string netsh = Sys.SystemExe("netsh.exe");
+            if (string.IsNullOrWhiteSpace(adapter) || adapter.IndexOf('"') >= 0 || CmdLine.HasControlChars(adapter))
+            {
+                log.AppendLine(fam + " → geçersiz bağdaştırıcı adı atlandı.");
+                return false;
+            }
+            if (servers != null && servers.Count > 0)
+            {
+                // ayar dosyasından gelen adresler netsh'e verilmeden önce doğrulanır
+                var family = v6 ? System.Net.Sockets.AddressFamily.InterNetworkV6 : System.Net.Sockets.AddressFamily.InterNetwork;
+                var valid = servers.Where(s => s != null && s.IndexOf('%') < 0 && IPAddress.TryParse(s, out var ip) && ip.AddressFamily == family).ToList();
+                if (valid.Count != servers.Count) log.AppendLine(fam + " → " + (servers.Count - valid.Count) + " geçersiz adres atlandı.");
+                if (valid.Count == 0) return false;
+                servers = valid;
+            }
             if (servers == null || servers.Count == 0)
             {
                 var r = Sys.Run(netsh, "interface " + fam + " set dnsservers name=" + Q(adapter) + " source=dhcp");
@@ -289,38 +394,122 @@ namespace DPIKalkan
                     if (a.V6.Count > 0 || a.HasGlobalV6) SetServers(a.Name, true, new[] { c.V6a, c.V6b }, log);
                 }
             }
-            if (!c.IsAuto && doh && DohSupported) allOk &= EnableDoh(c, log);
+            if (!c.IsAuto && doh)
+            {
+                if (DohSupported) allOk &= EnableDoh(c, log);
+                else
+                {
+                    log.AppendLine(DohUnsupportedMessage(WindowsBuild));
+                    App.Log(DohUnsupportedMessage(WindowsBuild), LogLevel.Warn);
+                }
+            }
+            else if (c.IsAuto && DohSupported) allOk &= RestoreDoh(log);   // otomatiğe dönünce şifreli DNS kayıtları da eski hâline
             Native.FlushDns();
             report = log.ToString().Trim();
             App.Log("Windows DNS ayarı: " + c.Name + (doh ? " (şifreli)" : "") + (allOk ? " uygulandı." : " – bazı adımlar başarısız."), allOk ? LogLevel.Success : LogLevel.Warn);
             return allOk;
         }
 
+        /// <summary>
+        /// Şifreli DNS'i Windows'un kendi aracıyla (netsh dns ... encryption) açar; başka bir betik yorumlayıcısı kullanılmaz.
+        /// Yalnızca Windows 11'de çağrılır (Apply denetler).
+        /// </summary>
         static bool EnableDoh(SystemDnsChoice c, StringBuilder log)
         {
-            var sb = new StringBuilder("$ErrorActionPreference='Stop';");
-            foreach (var ip in new[] { c.V4a, c.V4b, c.V6a, c.V6b })
+            string netsh = Sys.SystemExe("netsh.exe");
+            // DoH'a genel olarak izin ver (Windows 11'de varsayılan "enabled"; kapalıysa açılır ve eski değer yedeklenir)
+            string global = ParseGlobalDoh(Sys.Run(netsh, "dns show global").Output);
+            if (global != null && !global.StartsWith("enab"))
             {
-                sb.Append("if (Get-DnsClientDohServerAddress -ServerAddress '" + ip + "' -ErrorAction SilentlyContinue) { ")
-                  .Append("Set-DnsClientDohServerAddress -ServerAddress '" + ip + "' -DohTemplate '" + c.Doh + "' -AllowFallbackToUdp $false -AutoUpgrade $true } else { ")
-                  .Append("Add-DnsClientDohServerAddress -ServerAddress '" + ip + "' -DohTemplate '" + c.Doh + "' -AllowFallbackToUdp $false -AutoUpgrade $true };");
+                if (App.Settings.GlobalDohBackup == null) App.Settings.GlobalDohBackup = global;
+                var g = Sys.Run(netsh, "dns set global doh=yes");
+                if (g.Code != 0) g = Sys.Run(netsh, "dns add global doh=yes");
+                if (g.Code != 0) { log.AppendLine("Şifreli DNS genel ayarı açılamadı: " + Short(g.Output)); App.Log("netsh dns global doh=yes: " + g.Output, LogLevel.Warn); }
             }
-            var r = Sys.PowerShell(sb.ToString());
-            try
+            var cmds = DohCommands(c);
+            if (cmds.Count == 0)
             {
-                using (var k = Registry.LocalMachine.CreateSubKey(@"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters"))
-                    k?.SetValue("EnableAutoDoh", 2, RegistryValueKind.DWord);
+                log.AppendLine("Şifreli DNS (DoH) → bu seçenek için geçerli bir DoH adresi yok.");
+                return false;
             }
-            catch { }
-            log.AppendLine("Şifreli DNS (DoH) → " + (r.Code == 0 ? "etkin" : "etkinleştirilemedi: " + r.Output));
-            return r.Code == 0;
+            var done = new List<string>();
+            var failed = new List<string>();
+            foreach (var cmd in cmds)
+            {
+                var before = QueryDoh(netsh, cmd.Ip);
+                if (!App.Settings.DohBackups.Any(b => b.Server == cmd.Ip))
+                    App.Settings.DohBackups.Add(new DohBackup
+                    {
+                        Server = cmd.Ip, Existed = before.Exists, Template = before.Template,
+                        AutoUpgrade = before.AutoUpgrade ?? false, UdpFallback = before.UdpFallback ?? false,
+                    });
+                var r = Sys.Run(netsh, before.Exists ? cmd.Set : cmd.Add);
+                // netsh'in çıkış koduna güvenmek yerine sonuç her sunucu için geri okunur
+                var after = QueryDoh(netsh, cmd.Ip);
+                bool good = after.Exists && after.AutoUpgrade == true && after.UdpFallback == false &&
+                            string.Equals(after.Template, c.Doh, StringComparison.OrdinalIgnoreCase);
+                if (good) { done.Add(cmd.Ip); continue; }
+                string why = r.Code != 0 ? "netsh hata verdi (" + r.Code + "): " + Short(r.Output)
+                                         : "komut çalıştı ama doğrulanamadı (Auto-upgrade: " + Fmt(after.AutoUpgrade) + ", şablon: " + (after.Template.Length > 0 ? after.Template : "yok") + ")";
+                failed.Add(cmd.Ip + " → " + why);
+                App.Log("[DoH] " + cmd.Ip + ": " + why, LogLevel.Warn);
+            }
+            App.Save();
+            if (failed.Count == 0)
+                log.AppendLine("Şifreli DNS (DoH) → etkin ve doğrulandı: " + string.Join(", ", done) + " (Auto-upgrade: yes).");
+            else
+            {
+                log.AppendLine("Şifreli DNS (DoH) → " + done.Count + "/" + cmds.Count + " sunucuda etkinleştirilebildi:");
+                foreach (var f in failed) log.AppendLine("  " + f);
+            }
+            App.Log("Şifreli DNS: " + done.Count + "/" + cmds.Count + " sunucu doğrulandı (" + c.Name + ").", failed.Count == 0 ? LogLevel.Success : LogLevel.Warn);
+            return failed.Count == 0;
         }
 
-        public static bool Restore(out string report)
+        /// <summary>
+        /// DPI Kalkan'ın değiştirdiği şifreli DNS kayıtlarını eski hâline döndürür: önceden var olan kayıt eski şablon ve
+        /// Auto-upgrade/UDP-fallback değerleriyle geri yazılır, DPI Kalkan'ın eklediği kayıt silinir. Sonuç geri okunarak doğrulanır.
+        /// </summary>
+        public static bool RestoreDoh(StringBuilder log)
+        {
+            var s = App.Settings;
+            if (s.DohBackups.Count == 0 && s.GlobalDohBackup == null) return true;
+            string netsh = Sys.SystemExe("netsh.exe");
+            bool ok = true;
+            foreach (var b in s.DohBackups.ToList())
+            {
+                if (!IPAddress.TryParse(b.Server ?? "", out _)) { s.DohBackups.Remove(b); continue; }
+                (int Code, string Output) r;
+                if (!b.Existed) r = Sys.Run(netsh, "dns delete encryption server=" + b.Server);
+                else
+                    r = Sys.Run(netsh, "dns set encryption server=" + b.Server + (SafeTemplate(b.Template) ? " dohtemplate=" + b.Template : "") +
+                                       " autoupgrade=" + (b.AutoUpgrade ? "yes" : "no") + " udpfallback=" + (b.UdpFallback ? "yes" : "no"));
+                var after = QueryDoh(netsh, b.Server);
+                bool good = b.Existed ? after.Exists && after.AutoUpgrade == b.AutoUpgrade : !after.Exists;
+                if (good) { s.DohBackups.Remove(b); continue; }
+                ok = false;
+                string why = b.Server + " → " + (r.Code != 0 ? "netsh hata verdi: " + Short(r.Output) : "geri alındı ama doğrulanamadı (Auto-upgrade: " + Fmt(after.AutoUpgrade) + ")");
+                log.AppendLine("Şifreli DNS geri alınamadı: " + why);
+                App.Log("[DoH] geri alma: " + why, LogLevel.Warn);
+            }
+            if (s.GlobalDohBackup != null)
+            {
+                string v = s.GlobalDohBackup.StartsWith("dis") ? "no" : s.GlobalDohBackup.StartsWith("auto") ? "auto" : "yes";
+                var g = Sys.Run(netsh, "dns set global doh=" + v);
+                if (g.Code == 0) s.GlobalDohBackup = null;
+                else { ok = false; log.AppendLine("Şifreli DNS genel ayarı geri alınamadı: " + Short(g.Output)); }
+            }
+            App.Save();
+            if (ok) log.AppendLine("Şifreli DNS (DoH) kayıtları eski hâline döndürüldü.");
+            return ok;
+        }
+
+        /// <param name="onlyBackups">true: yalnızca DPI Kalkan'ın değiştirdiği (yedeği olan) bağdaştırıcılar geri alınır (kaldırma için).</param>
+        public static bool Restore(out string report, bool onlyBackups = false)
         {
             var log = new StringBuilder();
             bool ok = true;
-            var adapters = TargetAdapters();
+            var adapters = onlyBackups ? new List<AdapterInfo>() : TargetAdapters();
             foreach (var b in App.Settings.DnsBackups.ToList())
             {
                 log.AppendLine("■ " + b.Adapter);
@@ -334,6 +523,7 @@ namespace DPIKalkan
                 SetServers(a.Name, true, null, log);
             }
             App.Settings.DnsBackups.Clear();
+            ok &= RestoreDoh(log);   // şifreli DNS kayıtları da DPI Kalkan'dan önceki hâline
             App.Save();
             Native.FlushDns();
             report = log.ToString().Trim();

@@ -55,7 +55,7 @@ namespace DPIKalkan
                         });
                     }
                 }
-                catch { }
+                catch (Exception ign) { App.Ignored("Geçmiş okunamadı", ign); }
             }
         }
 
@@ -76,7 +76,7 @@ namespace DPIKalkan
                         var fi = new FileInfo(FilePath);
                         if (fi.Length > 512 * 1024) Compact();
                     }
-                    catch { }
+                    catch (Exception ign) { App.Ignored("Geçmiş kaydedilemedi", ign); }
                 }
             }
             App.Post(() => Changed?.Invoke());
@@ -98,7 +98,7 @@ namespace DPIKalkan
             lock (gate)
             {
                 items.Clear();
-                try { File.Delete(FilePath); } catch { }
+                try { File.Delete(FilePath); } catch (Exception ign) { App.Ignored("Geçmiş silinemedi", ign); }
             }
             App.Post(() => Changed?.Invoke());
         }
