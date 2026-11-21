@@ -1,4 +1,4 @@
-DPI KALKAN 2.3.0
+DPI KALKAN 2.4.0
 ================
 
 GoodbyeDPI için kolay kullanımlı internet erişim kalkanı. Servis sağlayıcıların
@@ -9,19 +9,32 @@ aşar. VPN değildir: trafiğiniz şifrelenmez, IP adresiniz değişmez.
 
 GEREKSİNİMLER
 -------------
-- Windows 10 veya Windows 11 (32 ya da 64 bit)
+- Windows 10 veya Windows 11 (kurulum paketi 64 bit; taşınabilir zip 32/64 bit)
 - .NET Framework 4.8 (Windows 10/11'de zaten yüklüdür)
 - Yönetici yetkisi (ağ sürücüsü yüklenebilmesi için)
 
 KURULUM
 -------
-1. Zip dosyasına sağ tıklayın → "Tümünü ayıkla". Klasörü kalıcı bir yere koyun
-   (ör. C:\Program Files\DPI Kalkan ya da Belgeler). Zip içinden çalıştırmayın.
-2. "DPIKalkan.exe"yi çalıştırın, yönetici izni sorusuna "Evet" deyin.
-   * "Windows bilgisayarınızı korudu" uyarısı çıkarsa: "Ek bilgi" →
-     "Yine de çalıştır". (Uygulama dijital olarak imzalı değildir.)
-3. Koruma otomatik başlar. "Discord'u Test Et" ile kontrol edin; Discord açıksa
-   "Discord'u yeniden başlat" düğmesine basın.
+İki seçenek vardır:
+
+A) KURULUM PAKETİ (önerilen): DPI-Kalkan-x.y.z-Setup.exe
+   Çalıştırın, yönetici iznini onaylayın. C:\Program Files\DPI Kalkan klasörüne
+   kurulur, Başlat menüsüne ve Ayarlar → Uygulamalar listesine eklenir.
+   Arka plan hizmeti ve "Windows açılışında başlat" yalnızca bu sürümde açılır.
+
+B) TAŞINABİLİR: DPI-Kalkan-x.y.z.zip
+   Zip'e sağ tıklayın → "Tümünü ayıkla" (zip'in içinden çalıştırmayın), sonra
+   "DPIKalkan.exe"yi çalıştırıp yönetici iznini onaylayın. Koruma uygulama
+   modunda çalışır: uygulama açık (tepside) kaldığı sürece sürer.
+   Arka plan hizmeti ve "Windows açılışında başlat" güvenlik gereği kapalıdır:
+   herkesin yazabildiği bir klasördeki dosyaları SYSTEM/yönetici yetkisiyle
+   otomatik çalıştırmak, zararlı bir programın yetki kazanmasına yol açabilir.
+
+Her iki sürümde:
+* "Windows bilgisayarınızı korudu" uyarısı çıkarsa: "Ek bilgi" → "Yine de
+  çalıştır". (Uygulama henüz dijital olarak imzalı değildir.)
+* Koruma otomatik başlar. "Discord'u Test Et" ile kontrol edin; Discord açıksa
+  "Discord'u yeniden başlat" düğmesine basın.
 
 DISCORD AÇILMIYORSA
 -------------------
@@ -41,6 +54,13 @@ ARAYÜZ DÜZEYLERİ (Ayarlar ya da Görünüm sayfasından)
 - Orta    : + Profiller, İnternet Kontrolü, DNS Ayarları, Hedef Siteler, Proxy.
 - Detaylı : + Günlük, ağ bilgisi, komut satırları, betik dışa aktarma.
 
+DNS AYARLARI (Orta/Detaylı arayüz)
+----------------------------------
+Windows DNS'ini Cloudflare, Google, Quad9, AdGuard ya da OpenDNS yapabilirsiniz.
+Windows 11'de "Şifreli DNS (DoH)" da açılır; sonuç her sunucu için doğrulanıp
+raporlanır. "Eski ayarlara dön" DNS sunucularını ve şifreli DNS kayıtlarını
+DPI Kalkan'dan önceki hâline getirir. Windows 10 şifreli DNS'i desteklemez.
+
 PROXY (Orta/Detaylı arayüz)
 ---------------------------
 Yöntemler yetmezse (ör. IP engeli) kendi proxy'nizi girin: "Hızlı giriş"
@@ -57,14 +77,21 @@ Sesli sohbet (UDP) proxy'den geçmez.
 PAYLAŞMA VE KISAYOL
 -------------------
 - Profiller → Paylaş → "Profil kodunu kopyala": çalışan yönteminizi arkadaşınıza
-  DKP1:… koduyla gönderin; o da "Koddan profil ekle" der.
+  DKP1:… koduyla gönderin; o da "Koddan profil ekle" der. Kodlar güvenli
+  parametre listesinden geçmeden eklenmez.
 - Ayarlar → "Kısayol tuşu": Ctrl+Alt+K ile korumayı her yerden aç/kapat.
 - Ayarlar → Yedekleme: tüm ayarları dosyaya kaydedin / başka bilgisayara yükleyin.
 - İnternet Kontrolü → Hız Testi ve Geçmiş (grafikli bağlantı geçmişi).
-- Güncelleme: yeni sürüm çıkınca ana sayfada "Güncelle" düğmesi görünür; paket
-  SHA-256 ile doğrulanıp ayarlar korunarak kurulur (Ayarlar → Güncellemeler).
 - Yardım: Sorun Giderme → "Destek paketi" (kişisel bilgiler gizlenir) ve
   "Sorun bildir" (GitHub). Proje sayfası: https://github.com/Mr-Leywin/dpi-kalkan
+
+GÜNCELLEME
+----------
+Yeni sürüm çıkınca ana sayfada "Güncelle" düğmesi görünür (Ayarlar →
+Güncellemeler). İndirilen dosya SHA-256 ile doğrulanır ve ayarlar korunur.
+- Kurulumlu sürüm kurulum paketiyle sessizce yükseltilir ve kendini yeniden açar.
+- Taşınabilir sürüm zip ile yerinde güncellenir; önceki sürüm
+  veri\onceki-surum klasörüne yedeklenir.
 
 GÖRÜNÜM
 -------
@@ -78,12 +105,23 @@ Pencereyi kapatınca uygulama saat yanındaki kalkan simgesinde çalışmaya dev
 eder; görev çubuğunda ve Alt+Tab'da görünmez. Sağ tık menüsü: başlat/durdur,
 yöntem seç, test et, en iyi yöntemi bul, Discord'u yeniden başlat, çıkış.
 Renkler: yeşil = aktif, gri = kapalı, sarı = başlatılıyor, kırmızı = hata.
+Uygulama beklenmedik şekilde kapanırsa (çökme, zorla kapatma) sonraki açılışta
+"Son kapanış beklenmedikti" bildirimi görünür (DK-106).
 
-ANTİVİRÜS UYARISI
------------------
-GoodbyeDPI, "WinDivert" adlı bir ağ sürücüsü kullanır. Kaspersky, Norton gibi
-bazı antivirüsler bunu "RiskTool" olarak işaretleyebilir. Bu bir virüs değildir.
-Engellenirse (hata kodu DK-204) uygulama klasörünü antivirüs istisnalarına ekleyin.
+ANTİVİRÜS VE SMARTSCREEN
+------------------------
+GoodbyeDPI, "WinDivert" adlı bir ağ sürücüsü kullanır. Bu yüzden bazı
+antivirüsler onu "HackTool/RiskTool" olarak işaretleyebilir. Bu bir virüs
+değildir; dosyalar resmi GoodbyeDPI 0.2.3rc3 sürümünden değiştirilmeden alınmıştır.
+Engellenirse (hata kodu DK-204) sırasıyla:
+1. Sorun Giderme → "Tam kontrolü başlat": "Dosya bütünlüğü" satırı dosyaların
+   resmi sürümle aynı olduğunu (SHA-256) doğrular. İndirdiğiniz dosyayı sürüm
+   sayfasındaki SHA256SUMS.txt ile de karşılaştırabilirsiniz.
+2. Dosyayı karantinadan geri yükleyin ve Microsoft'a yanlış pozitif olarak
+   bildirin ("Yanlış pozitif bildir" düğmesi:
+   https://www.microsoft.com/en-us/wdsi/filesubmission).
+3. Yalnızca son çare olarak ve yalnızca DPI Kalkan klasörünü antivirüs
+   istisnalarına ekleyin.
 
 YEDEK BETİKLER
 --------------
@@ -92,12 +130,18 @@ YEDEK BETİKLER
 
 KALDIRMA
 --------
-1. Ayarlar → "Windows açılışında başlat" ve "Arka plan hizmeti modu"nu kapatın.
-2. DNS Ayarları'nda değişiklik yaptıysanız "Eski ayarlara dön"e basın.
-3. Tepsi simgesine sağ tık → Çıkış, sonra klasörü silin.
+DPI Kalkan'ın Windows'ta yaptığı değişiklikler (arka plan hizmeti, açılış görevi,
+WinDivert kaydı, Windows proxy'si, DNS ve şifreli DNS ayarları) geri alınır:
+- Kurulumlu sürüm: Ayarlar → Uygulamalar → DPI Kalkan → Kaldır. Ayarların
+  (veri klasörü) da silinip silinmeyeceği sorulur.
+- Taşınabilir sürüm: Ayarlar → "Temiz kaldır", ardından klasörü silin.
+- Komut satırı: DPIKalkan.exe --uninstall
+Program bazlı proxy için oluşturulan tarayıcı profilleri %LOCALAPPDATA%\DPI Kalkan
+klasöründedir; isterseniz onu da silebilirsiniz.
 
 LİSANSLAR
 ---------
+DPI Kalkan – MIT Lisansı. Copyright (c) 2026 Osman Barış MEDİNE (Mr Leywin)
 GoodbyeDPI © ValdikSS – Apache 2.0      https://github.com/ValdikSS/GoodbyeDPI
 WinDivert  © basil00  – LGPLv3          https://github.com/basil00/WinDivert
 Ayrıntılar "lisanslar" klasöründedir.

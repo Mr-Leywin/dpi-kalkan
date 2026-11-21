@@ -1,6 +1,6 @@
 # Üçüncü taraf bileşenler / Third-party notices
 
-DPI Kalkan, aşağıdaki açık kaynak bileşenleri **değiştirmeden** birlikte dağıtır. DPI Kalkan'ın kendi kaynak kodu MIT lisanslıdır (bkz. `LICENSE`); bu bileşenler kendi lisanslarına tabidir. Lisans metinlerinin tamamı `third_party/goodbyedpi/licenses/` klasöründe ve dağıtılan paketin `lisanslar/` klasöründedir.
+DPI Kalkan, aşağıdaki açık kaynak bileşenleri **değiştirmeden** birlikte dağıtır. DPI Kalkan'ın kendi kaynak kodu MIT lisanslıdır (Copyright (c) 2026 Osman Barış MEDİNE (Mr Leywin); bkz. `LICENSE`); bu bileşenler kendi lisanslarına tabidir. Lisans metinlerinin tamamı `third_party/goodbyedpi/licenses/` klasöründe ve dağıtılan paketin `lisanslar/` klasöründedir.
 
 DPI Kalkan bu projelerin geliştiricileriyle bağlantılı değildir ve onlar tarafından desteklenmez.
 

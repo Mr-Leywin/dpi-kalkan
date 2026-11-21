@@ -63,14 +63,14 @@
 
 <section id="kurulum">
   <h2>1. Kurulum</h2>
-  <ol>
-    <li>Zip dosyasına sağ tıklayın → <b>Tümünü ayıkla</b>. Uygulamayı zip'in içinden çalıştırmayın (hata kodu <a href="#DK-103">DK-103</a>).</li>
-    <li>Çıkan klasörü kalıcı bir yere taşıyın, örneğin <code>C:\Program Files\DPI Kalkan</code> ya da <code>Belgeler</code>.</li>
-    <li><code>DPIKalkan.exe</code>'ye çift tıklayın ve yönetici iznini onaylayın. Ağ sürücüsünü yükleyebilmek için yönetici izni gerekir.</li>
-    <li>Windows "Bilgisayarınız korundu" derse: <b>Ek bilgi → Yine de çalıştır</b>. Uygulama dijital olarak imzalı olmadığı için bu uyarı çıkar.</li>
-  </ol>
-  <p>Ek bir şey kurmanız gerekmez. Gereken .NET Framework 4.8, Windows 10 ve 11'de zaten yüklüdür.</p>
-  <div class="tip warn"><b>Antivirüs uyarısı:</b> GoodbyeDPI'ın kullandığı WinDivert sürücüsü bazı antivirüs programlarında (Kaspersky, Norton, ESET…) "RiskTool" olarak görünebilir. Bu bir virüs değildir; ağ paketlerini işlediği için böyle işaretlenir. Engellenirse klasörü antivirüs istisnalarına ekleyin (bkz. <a href="#DK-204">DK-204</a>).</div>
+  <p>DPI Kalkan iki biçimde dağıtılır:</p>
+  <ul>
+    <li><b>Kurulum paketi (önerilen):</b> <code>DPI-Kalkan-x.y.z-Setup.exe</code>'yi çalıştırın ve yönetici iznini onaylayın. <code>C:\Program Files\DPI Kalkan</code> klasörüne kurulur, Başlat menüsüne ve Ayarlar → Uygulamalar listesine eklenir. <b>Arka plan hizmeti</b> ve <b>Windows açılışında başlat</b> yalnızca bu sürümde kullanılabilir. Yalnızca 64 bit Windows içindir.</li>
+    <li><b>Taşınabilir zip:</b> Zip dosyasına sağ tıklayın → <b>Tümünü ayıkla</b> (zip'in içinden çalıştırmayın, bkz. <a href="#DK-103">DK-103</a>), sonra <code>DPIKalkan.exe</code>'yi çalıştırıp yönetici iznini onaylayın. Koruma uygulama modunda çalışır: uygulama açık (tepside) kaldığı sürece sürer.</li>
+  </ul>
+  <p>Ağ sürücüsünü yükleyebilmek için yönetici izni gerekir. Windows "Bilgisayarınız korundu" derse: <b>Ek bilgi → Yine de çalıştır</b>. Uygulama henüz dijital olarak imzalı olmadığı için bu uyarı çıkar. Ek bir şey kurmanız gerekmez; gereken .NET Framework 4.8, Windows 10 ve 11'de zaten yüklüdür.</p>
+  <div class="tip"><b>Hizmet ve otomatik başlatma neden yalnızca kurulumlu sürümde?</b> Bu iki özellik dosyaları SYSTEM ya da izin sormadan yönetici yetkisiyle çalıştırır. Masaüstü gibi herkesin yazabildiği bir klasörde bu, bilgisayardaki zararlı bir programın o dosyaları değiştirip yetki kazanmasına yol açabilir. Bu yüzden yalnızca yöneticilerin yazabildiği Program Files'a kurulduğunda açılırlar (bkz. <a href="#DK-705">DK-705</a>).</div>
+  <div class="tip warn"><b>Antivirüs uyarısı:</b> GoodbyeDPI'ın kullandığı WinDivert sürücüsü bazı antivirüs programlarında "HackTool" ya da "RiskTool" olarak görünebilir. Bu bir virüs değildir; dosyalar resmi GoodbyeDPI sürümünden değiştirilmeden alınmıştır. Engellenirse önce <b>Sorun Giderme → Tam kontrol</b> ile dosyaların resmi olduğunu (SHA-256) doğrulayın, sonra dosyayı Microsoft'a yanlış pozitif olarak bildirin; istisna eklemeyi yalnızca son çare olarak kullanın (bkz. <a href="#DK-204">DK-204</a>).</div>
 </section>
 
 <section id="kullanim">
@@ -204,11 +204,13 @@
 
 <section id="kaldir">
   <h2>14. Kaldırma</h2>
-  <ol>
-    <li>Ayarlar'da <b>Windows açılışında başlat</b> ve <b>Arka plan hizmeti modu</b> seçeneklerini kapatın.</li>
-    <li>DNS Ayarları sayfasında değişiklik yaptıysanız <b>Eski ayarlara dön</b>; Proxy sayfasında Windows proxy'si ayarladıysanız <b>Windows proxy'sini kapat</b> düğmesine basın.</li>
-    <li>Tepsi simgesine sağ tıklayıp <b>Çıkış</b> deyin ve klasörü silin. Program bazlı proxy için oluşturulan tarayıcı profilleri <code>%LOCALAPPDATA%\DPI Kalkan</code> klasöründedir; onu da silebilirsiniz.</li>
-  </ol>
+  <p>DPI Kalkan'ın Windows'ta yaptığı değişiklikler (arka plan hizmeti, açılış görevi, WinDivert sürücü kaydı, Windows proxy'si, DNS sunucuları ve şifreli DNS kayıtları) DPI Kalkan'dan önceki hâline döndürülerek kaldırılır:</p>
+  <ul>
+    <li><b>Kurulumlu sürüm:</b> Ayarlar → Uygulamalar → DPI Kalkan → <b>Kaldır</b>. Ayarların (<code>veri</code> klasörü) da silinip silinmeyeceği sorulur.</li>
+    <li><b>Taşınabilir sürüm:</b> Uygulamada <b>Ayarlar → Temiz kaldır</b>, ardından klasörü silin.</li>
+    <li><b>Komut satırı:</b> <code>DPIKalkan.exe --uninstall</code> (sessiz: <code>--uninstall --quiet</code>).</li>
+  </ul>
+  <p>Program bazlı proxy için oluşturulan tarayıcı profilleri <code>%LOCALAPPDATA%\DPI Kalkan</code> klasöründedir; kişisel veri içerebileceği için silinmez, isterseniz elle silebilirsiniz.</p>
   <p style="color:var(--muted)">GoodbyeDPI © ValdikSS (Apache 2.0) · WinDivert © basil00 (LGPLv3). Lisans metinleri <code>lisanslar</code> klasöründedir. DPI Kalkan bir VPN değildir: trafiğinizi şifrelemez ve IP adresinizi değiştirmez. Proje sayfası, yeni sürümler ve kaynak kod: <a href="https://github.com/Mr-Leywin/dpi-kalkan">github.com/Mr-Leywin/dpi-kalkan</a></p>
 </section>
 </div>
